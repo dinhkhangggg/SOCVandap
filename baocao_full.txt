@@ -1,0 +1,165 @@
+=== DOCUMENT: Báo Cáo SoC (1).docx ===
+Thiết Kế và Đánh Giá Bộ Tăng Tốc Nhân Ma Trận Theo Khối Tương Thích Luồng Dữ Liệu Sử Dụng Vitis HLS Trên Nền Tảng Zynq-7000 ZC702
+Tác giả: Chống Định Khang – 23161277, Phạm Trung Kiên – 23161283, Nguyễn Hồng Lịch – 24161298, Hoàng Bảo Phúc – 23161309, Lê Thanh Tú – 23161357
+Đơn vị: Khoa Điện – Điện tử, Trường Đại học Công nghệ Kỹ thuật Thành phố Hồ Chí Minh, Việt Nam.
+Email liên hệ: 23161277@student.hcmute.edu.vn
+1. Giới thiệu
+Trong kỷ nguyên của các hệ thống nhúng thông minh trên một vi mạch (System-on-Chip - SoC), phép nhân hai ma trận vuông kích thước N x N là nền tảng trong hàng loạt tác vụ xử lý thời gian thực như lọc thích nghi, biến đổi không gian trạng thái, xử lý ảnh và suy luận mạng nơ-ron tích chập. Xét hai ma trận đầu vào  và , ma trận tích  đòi hỏi tổng cộng N3 phép nhân và N2(N-1) phép cộng. Khi thực thi trên các bộ vi xử lý cấu trúc tuần tự (như nhân ARM Cortex-A9), thời gian tính toán tăng theo hàm bậc ba của kích thước dữ liệu, đồng thời tần suất truy cập bộ nhớ ngoài vượt quá dung lượng bộ nhớ đệm sẽ gây ra hiện tượng nghẽn von Neumann.
+Mảng phần tử logic khả trình (FPGA) cung cấp khả năng tính toán song song mức phần cứng với hàng trăm khối xử lý tín hiệu số (DSP) và hệ thống bộ nhớ phân tán trên chip (Block RAM - BRAM). Tuy nhiên, phương pháp thiết kế mạch mức thanh ghi truyền thống (Register-Transfer Level - RTL) bằng ngôn ngữ Verilog hoặc VHDL đòi hỏi thời gian phát triển kéo dài và khó khảo sát nhanh nhiều không gian kiến trúc khác nhau. Công nghệ Tổng hợp mức cao (Vitis HLS) giải quyết bài toán này bằng cách cho phép chuyển đổi trực tiếp đặc tả thuật toán từ ngôn ngữ C/C++ sang mạch phần cứng RTL thông qua các chỉ thị điều khiển kiến trúc (Optimization Directives/Pragmas).
+Mặc dù Vitis HLS hỗ trợ tự động hóa việc trích xuất đường dữ liệu (Datapath) và máy trạng thái hữu hạn (FSM), một mã nguồn C/C++ viết theo cách thông thường sẽ tạo ra kiến trúc phần cứng kém hiệu quả hoặc không thể mở rộng khi kích thước ma trận N lớn. Cụ thể, nếu áp dụng kỹ thuật trải phẳng vòng lặp trực tiếp lên thuật toán nhân ma trận cơ bản (Baseline), số lượng cổng đọc/ghi bộ nhớ và số khối nhân vật lý sẽ tăng tuyến tính theo N, nhanh chóng vượt quá giới hạn tài nguyên của các dòng FPGA tầm trung. Ngược lại, kiến trúc nhân ma trận theo khối kết hợp truyền dữ liệu luồng (Parallel Programming for FPGAs - Kastner et al.) cho phép chia nhỏ bài toán thành các khối tính toán kích thước cố định , giúp kiểm soát chặt chẽ tài nguyên phần cứng và tối ưu hóa băng thông truyền tải.
+Bài báo này thực hiện khảo sát và phân tích sự đánh đổi giữa hiệu suất thực thi (Latency, Initiation Interval) và chi phí tài nguyên phần cứng (BRAM_18K, DSP48E1, Flip-Flop, Look-Up Table) trên chip xc7z020clg484-1 thông qua thực nghiệm có kiểm soát, làm cơ sở cho việc lựa chọn thông số thiết kế bộ tăng tốc tối ưu.
+2. Cơ sở lý thuyết và kiến trúc thiết kế
+2.1. Phần cứng trên kit Zynq-7000 ZC702
+Toàn bộ các thiết kế trong này được tổng hợp nhắm tới vi mạch SoC Zynq-7000 XC7Z020-1CLG484C (xc7z020clg484-1) tích hợp trên bo mạch đánh giá Xilinx ZC702 Evaluation Kit với chu kỳ xung nhịp mục tiêu  (tần số hoạt động ) [3]. Miền logic khả trình (Programmable Logic - PL) dạng Artix-7 của vi mạch này cung cấp nguồn tài nguyên giới hạn như trình bày trong Bảng 1.
+Bảng 1: Tài nguyên phần cứng của SoC Zynq-7000 XC7Z020
+2.2. Thuật toán nhân ma trận thông thường
+Thuật toán nhân ma trận thông thường (matmul_baseline) tính trực tiếp từng phần tử AB[i][j] thông qua tích vô hướng (Inner Product) giữa hàng thứ i của ma trận A và cột thứ j của ma trận B:
+Khi áp dụng chỉ thị #pragma HLS PIPELINE II=1 tại vòng lặp COL_LOOP, trình tổng hợp trải phẳng (#pragma HLS UNROLL) vòng lặp con PRODUCT_LOOP bên trong để tính xong một phần tử AB[i][j] mới sau mỗi chu kỳ xung nhịp. Để cung cấp đồng thời N phần tử của hàng  và N phần tử của cột trong một chu kỳ mà không vượt quá giới hạn 2 cổng của BRAM, thiết kế áp dụng chỉ thị tái định hình mảng #pragma HLS ARRAY_RESHAPE theo chiều thứ hai của A (dim=2) và chiều thứ nhất của B (dim=1).
+2.3. Kiến trúc nhân ma trận theo khối tương thích Stream
+Để tách biệt sự phụ thuộc của tài nguyên phần cứng khỏi kích thước toàn cục N, thuật toán nhân ma trận theo khối (Kastner et al., Parallel Programming for FPGAs) phân rã ma trận N x N thành  khối con có kích thước cố định B x B (với  và ). Mỗi khối kết quả đầu ra ABpartial kích thước B x B được hình thành từ phép nhân giữa một dải ngang (Tile Row) kích thước B x N của ma trận A và một dải dọc (Tile Column) kích thước N x B của ma trận B thông qua tổng của N phép nhân tích ngoài (Outer Product):
+Mỗi vector B phần tử được đóng gói vào cấu trúc typedef struct { DTYPE a[BLOCK_SIZE]; } blockvec; và truyền qua giao diện FIFO tuần tự hls::stream<blockvec>. Kiến trúc phần cứng của blockmatmul gồm 4 giai đoạn:
+(1) Khởi tạo mảng cục bộ AB[B][B] về 0;
+(2) Nạp có điều kiện luồng Arows vào mảng tĩnh static DTYPE A[B][N] khi it % (N / B) == 0;
+(3) Tính tích ngoài song song trong vòng lặp PARTIAL_SUM_K ();
+(4) Xuất kết quả ra ABpartial.out.
+Hình 1: Sơ đồ kiến trúc phân khối ( blockmatmul ) [2]
+Hình 2: Đoạn code C++ của blockmatmul
+2.4. Giải quyết giới hạn tài nguyên và xung đột đồng bộ bằng chỉ thị HLS
+Bảng 2 tổng hợp các chỉ thị tối ưu hóa trong blockmatmul khi cờ USE_DIRECTIVES được kích hoạt.
+Bảng 2: Các chỉ thị tối ưu hóa trong blockmatmul
+Hình 3: Minh họa cơ chế gộp của array_reshape [4]
+Thiết lập hệ thống kiểm thử và kết quả thực nghiệm
+3.1. Giao diện Testbench hợp nhất và công thức quy đổi độ trễ toàn ma trận
+Testbench hợp nhất (testbench.cpp) sử dụng hàm cố định std::srand(42) để tạo các ma trận đầu vào A,B [-10,9]NxN đồng nhất giữa mọi lần chạy. Do hàm blockmatmul có hai nhánh thời gian thực thi khác nhau tùy thuộc vào điều kiện nạp luồng Arows: độ trễ cực đại  (khi it % (N / B) == 0, có thực hiện LOAD_A_COL) và độ trễ cực tiểu  (khi it % (N / B) != 0, tái sử dụng mảng tĩnh A), tổng độ trễ chu kỳ thực thi cho toàn bộ ma trận N x N gồm (N/B)2 khối được tính chính xác theo công thức:
+3.2 Kết quả mô phỏng C Synthesis & C/RTL Co-Simulation
+Kết quả mô phỏng cho thuật toán Block Matrix với Matrix Size = 32 x 32 và Block Size = 8 x 8 sử dụng Directive  ARRAY_RESHAPE + ARRAY_PARTITION + PIPELINE + UNROLL
+Hình 4: Kết quả mô phỏng C Synthesis
+Hình 5: Kết quả mô phỏng C/RTL Co-Simulation
+Chặng nạp LOAD_A_COL mất đúng 32 chu kỳ (đọc 32 gói Arows), chặng tính tích ngoài PARTIAL_SUM_K mất 35–36 chu kỳ (32 bước lặp x 64 phép MAC song song/chu kỳ) và chặng xuất kết quả WRITE_OUT mất đúng 65 chu kỳ.
+Trong 16 lần gọi hàm blockmatmul, có 4 lần đầu mỗi hàng khối phải nạp luồng Arows () và 12 lần bỏ qua bước nạp để dùng lại mảng tĩnh static A trên chip ().
+Độ trễ trung bình thực tế đạt  (tốt hơn mức ước lượng tĩnh  của C Synthesis), giúp nhân xong toàn bộ ma trận  chỉ trong 1832 chu kỳ ( ở tần số , nhanh gấp so với khi chưa dùng Directives). Hệ số  phản ánh mức độ cải thiện hiệu năng của khối B = 8 khi dịch chuyển từ thuần phần mềm/chưa tối ưu sang cấu hình tối ưu phần cứng.
+Khoảng cách giữa hai lần nạp Arows liên tiếp đúng bằng 1 giao dịch dài cộng 3 giao dịch ngắn (), chứng minh trên sóng RTL rằng mỗi dải ngang của ma trận A theo kiến trúc của Kastner et al. được tái sử dụng 4 lần liên tiếp và giúp tiết kiệm 75% băng thông đọc bộ nhớ.
+Hình 6: Dạng sóng mô phỏng
+Thanh trạng thái màu xanh dương chia làm 16 ô hoạt động liên tục ứng với biến đếm it[31:0] tăng từ 00000000 đến 0000000f (), kết thúc toàn bộ phép nhân ma trận  tại mốc thời gian  khởi tạo Reset).
+Tín hiệu Arows_read chỉ bật lên mức cao 4 lần tại đúng các giao dịch đầu mỗi hàng khối (it = 00, 04, 08, 0c) và giữ mức 0 trong suốt 12 giao dịch còn lại, chứng minh trực quan cơ chế tái sử dụng mảng tĩnh static A[8][32] giúp cắt giảm 75% băng thông đọc ma trận A.
+Tín hiệu ap_start giữ mức 1 liên tục trong khi ap_done và ap_ready phát ra đúng 16 xung nhọn (1-cycle pulses) đánh dấu thời điểm xuất xong từng khối ; các giao dịch có xung Arows_read đi trước (it = 00, 04, 08, 0c) có độ rộng dài hơn () so với 12 giao dịch chỉ có xung Bcols_read (), khoảng cách giữa hai xung Arows_read liên tiếp đúng bằng  (454 cycles).
+3.3 Bảng tổng hợp kết quả thực nghiệm
+Bảng 3: Tổng hợp kết quả độ trễ
+Bảng 4: Tổng hợp kết quả tối ưu phần cứng
+3.4 Phân tích các quy luật kiến trúc từ bảng kết quả thực nghiệm
+3.4.1. Phân tích định lượng độ trễ (Latency) và quy luật tăng đúng 1 chu kỳ trên mỗi bước lặp k
+Ở thuật toán Baseline:
+Khi tắt Directives, trình biên dịch Vitis HLS 2023.1 tự động kích hoạt chế độ cuộn đường ống mặc định (Auto-Pipelining cho vòng lặp có Trip Count 64 - UG1399) và cấp phát 2 bộ nhân 32-bit dùng chung (), thực hiện trung bình 2 phép nhân mỗi chu kỳ. Do đó, độ trễ đo được tuân theo công thức:
+(4)
+với N=8 là (5122/2)+7=263 chu kỳ; với N=16 là (4096/2)+12=2,060 chu kỳ; và với N=32 là (32768/2)+14=16,398 chu kỳ.
+Khi bật Directives, vòng lặp trong cùng PRODUCT_LOOP được trải phẳng và vòng lặp COL_LOOP đạt , giúp tính xong 1 phần tử đầu ra sau mỗi chu kỳ. Độ trễ giảm xuống đúng bằng : với N=8 là 64+7=71 chu kỳ (tăng tốc 3.70); với N=16 là 256+8=264 chu kỳ (tăng tốc 7.80); và với N=32 là 1024+9=1,033 chu kỳ (tăng tốc 15.87).
+Ở thuật toán Block Matrix (blockmatmul):
+Hiệu số giữa độ trễ cực đại và cực tiểu trong một lần gọi hàm () chính là thời gian thực thi của nhánh điều kiện if (counter == 0) nạp N gói dữ liệu từ luồng Arows vào bộ đệm static A[B][N]. Ở chế độ có Directives (WITH_DIR), tại N=8 (B=4), =48-37=11 chu kỳ (8 chu kỳ đọc stream + 3 chu kỳ trễ đường ống); tại N=16 (B=4,8), =64-45=113-94=19 chu kỳ (16+3); và tại N=32 (B=4,8), =96-61=145-110=35 chu kỳ (32+3). Riêng trường hợp N=8, B=8, do N/B=1 nên it % 1 == 0 luôn đúng, nhánh nạp Arows luôn thực thi khiến  chu kỳ.
+Quan sát giá trị  khi bật Directives: với khối B=4, khi N tăng từ 8→16→32 (tăng thêm +8 và +16 bước lặp k),  tăng từ 37→45→61 chu kỳ (tăng đúng +8 và +16 chu kỳ). Tương tự với khối B=8, khi N tăng từ 16→32 (tăng +16 bước lặp k),  tăng từ 94→110 chu kỳ (tăng đúng +16 chu kỳ). Quy luật  chu kỳ/bước lặp này chứng minh vòng lặp tích ngoài PARTIAL_SUM_K đã đạt khoảng khởi tạo  chu kỳ nhờ ARRAY_RESHAPE và ARRAY_PARTITION.
+3.4.2. Tính bất biến tài nguyên theo kích thước ma trận N của kiến trúc phân khối
+Gia tăng tài nguyên của Baseline theo N:
+Khi N tăng từ 8→16→32, cấu hình Baseline có Directives đòi hỏi số khối DSP48E1 tăng tuyến tính từ 24→48→96 khối, số Flip-Flop tăng gấp 4 lần từ 2,316→4,572→9,108 FF và số LUT tăng từ 1,099→2,027→3,892 LUT. Đồng thời, vì toàn bộ ma trận A và B bị ép gộp thành từ dữ liệu rộng ở giao diện cổng (BRAM_18K = 0), thiết kế này đòi hỏi băng thông cổng I/O ngoại vi lên tới ở N=32 và không thể triển khai thực tế khi N ≥128 (vượt quá 220 DSP của ZC702).
+Tính cố định tài nguyên tuyệt đối của Block Matrix theo N:
+Với kích thước khối B=4, khi kích thước ma trận N tăng từ 8x8 lên 16x16 và 32x32, tài nguyên phần cứng giữ cố định ở mức 4 khối BRAM_18K () và 48 khối DSP48E1 (). Đáng chú ý, số lượng Flip-Flop chỉ tăng đúng 3 thanh ghi mỗi khi N nhân đôi (4,582→4,585→4,588 FF) — tương ứng chính xác với 1 bit mở rộng của thanh ghi bộ đếm vòng lặp k[0,N-1] ở 3 giai đoạn (LOAD_A_COL, PARTIAL_SUM_K và FSM).
+Với kích thước khối B=8, tài nguyên phần cứng cũng bất biến theo N ở mức 8 khối BRAM_18K () và 192 khối DSP48E1 (), trong khi số Flip-Flop chỉ tăng đúng 3 thanh ghi (17,646→17,649→17,652 FF) và LUT chỉ chênh lệch vài đơn vị (17,568→17,570→17,582 LUT).
+3.4.3. Hiệu quả tiết kiệm BRAM của ARRAY_RESHAPE
+Một chi tiết kỹ thuật trong Bảng 4 xuất hiện ở cặp cấu hình N=32, B=8: khi chưa dùng Directives, thiết kế tiêu tốn 10 khối BRAM_18K, nhưng khi bật Directives, số lượng BRAM lại giảm xuống còn 8 khối BRAM_18K. Nguyên nhân là do khi chưa có Directives, mảng cục bộ AB[8][8] (64 phần tử 32-bit) được Vitis HLS ánh xạ vào 2 khối BRAM_18K riêng biệt cộng với 8 khối BRAM của mảng A[8][32]. Khi bật Directives, chỉ thị #pragma HLS ARRAY_PARTITION variable=AB complete dim=0 chuyển toàn bộ mảng tích lũy AB[8][8] sang thanh ghi Flip-Flop để cộng dồn song song 64 phần tử mỗi chu kỳ, trong khi #pragma HLS ARRAY_RESHAPE variable=A complete dim=1 đóng gói gọn mảng A[8][32] thành các từ rộng 256-bit nằm vừa khít trong 8 khối BRAM_18K (mỗi khối BRAM_18K ở chế độ Simple Dual-Port cung cấp độ rộng dữ liệu tối đa 32-bit, nên  khối BRAM_18K).
+3.5. Đóng gói IP và thiết kế hệ thống SoC trên AMD Vivado
+Hình 7: Thiết kế hệ thống SoC
+Kiến trúc hệ thống lai (Hybrid SoC): Thiết kế kết hợp tối ưu giữa bộ xử lý nhúng ARM (PS) và miền logic khả trình FPGA (PL) trên nền tảng Zynq-7000 nhằm tăng tốc phần cứng cho thuật toán nhân ma trận khối (blockmatmul_0).
+Luồng dữ liệu khép kín (Full-Loop DMA): Sử dụng hai khối AXI DMA độc lập (axi_dma_0 và axi_dma_1) chạy song song để đẩy dữ liệu vào hai cổng đầu vào Arows và Bcols, đồng thời tận dụng chiều ngược lại để thu gom kết quả tính toán từ IP HLS ghi trở lại DDR RAM.
+Tối ưu hóa băng thông bộ nhớ: Tích hợp khối chuyển mạch axi_mem_intercon để kết nối trực tiếp với cổng hiệu năng cao S_AXI_HP0 của PS, giải quyết bài toán nghẽn cổ chai khi truyền tải dữ liệu lớn giữa bộ nhớ ngoài và mạch tăng tốc.
+Hệ thống điều khiển và đồng bộ: Định tuyến tín hiệu điều khiển chuẩn AXI-Lite thông qua khối ps7_0_axi_periph để CPU cấu hình các ngoại vi, kết hợp cùng hệ thống xung nhịp và tín hiệu reset đồng bộ toàn miền PL.
+Nguyên lý hoạt động:
+Cấu hình điều khiển: CPU ARM (PS) cấu hình các thông số, trạng thái cho các khối ngoại vi (IP HLS và hai khối AXI DMA) thông qua mạng lưới điều khiển chuẩn AXI-Lite.
+Truyền dữ liệu đầu vào (MM2S): Hai khối AXI DMA độc lập lấy dữ liệu ma trận A và B từ DDR RAM, chuyển đổi thành các luồng AXI-Stream băng thông rộng (128-bit) và bơm song song vào hai cổng đầu vào Arows và Bcols của khối HLS blockmatmul_0 (vận hành theo mô hình Streaming Outer-Product).
+Xử lý tính toán phần cứng: Khối tăng tốc HLS thực hiện phép nhân ma trận với tốc độ cao trực tiếp trên các tài nguyên phần cứng (DSP, BRAM, logic) thuộc miền FPGA.
+Thu gom và trả kết quả (S2MM): Ma trận kết quả sau khi tính toán được thu gom qua luồng Stream ngõ ra và được khối DMA ghi ngược lại trực tiếp vào DDR RAM thông qua cổng hiệu năng cao S_AXI_HP0, hoàn tất chu trình tính toán để CPU đọc kết quả.
+Hình 8: Báo cáo timing
+Worst Negative Slack (WNS): Đạt +0.320 ns. Giá trị dương này chứng tỏ các đường dẫn dữ liệu trong mạch đáp ứng tốt, chạy nhanh hơn yêu cầu của chu kỳ xung nhịp.
+Total Negative Slack (TNS): 0.000 ns, xác nhận không có bất kỳ độ trễ âm tích lũy nào trong toàn bộ thiết kế.
+Số điểm lỗi (Failing Endpoints): 0 trên tổng số 31,186 endpoints.
+Worst Hold Slack (WHS): Đạt +0.008 ns. Giá trị dương đảm bảo dữ liệu được giữ ổn định an toàn sau cạnh xung nhịp, triệt tiêu nguy cơ tranh chấp dữ liệu (race condition).
+Total Hold Slack (THS): 0.000 ns.
+Số điểm lỗi (Failing Endpoints): 0 trên tổng số 31,186 endpoints.
+Worst Pulse Width Slack (WPWS): Đạt +3.750 ns, đảm bảo độ rộng xung an toàn cho các chân cấp phát xung nhịp và cấu trúc thanh ghi.
+Số điểm lỗi (Failing Endpoints): 0 trên tổng số 10,915 endpoints.
+Hình 9: Báo cáo power
+Tổng công suất tiêu thụ trên chip (Total On-Chip Power): Đạt 1.762 W. Đây là mức tiêu thụ năng lượng tối ưu và tiết kiệm cho một hệ thống SoC lai (Hybrid SoC) tích hợp cả vi xử lý và phần cứng tăng tốc.
+Nhiệt độ tiếp giáp (Junction Temperature - ): 45.3°C. Mức nhiệt độ này thấp so với giới hạn nhiệt độ hoạt động cho phép của chip (thường là 85°C đối với dòng thương mại).
+Công suất động (Dynamic Power): 1.619 W (chiếm 92%).
+Chiếm phần lớn công suất của toàn hệ thống.
+Khối xử lý trung tâm (PS7): Tiêu thụ 1.573 W, chiếm phần lớn áp đảo với 94% công suất động. Điều này hợp lý vì hệ thống vi xử lý ARM bên trong PS đang duy trì các tiến trình điều hành và quản lý ngoại vi chung.
+Miền Logic Lập trình (PL) - Các khối IP tăng tốc & DMA:Clocks: 0.033 W (2%), Signals: 0.006 W (1%), Logic: 0.005 W (<1%), BRAM: 0.002 W (<1%), DSP: <0.001 W (<1%).
+Việc các tài nguyên PL (DSP và BRAM) tiêu thụ năng lượng cực thấp (< 1%) là do công cụ Vivado thực hiện ước lượng công suất ở trạng thái tĩnh (vectorless), khi luồng dữ liệu DMA chưa được kích hoạt bơm qua IP ở mức toàn tải. Tuy nhiên, mức công suất nền (1.762 W) cho thấy hệ thống Hybrid SoC nằm trong giới hạn tản nhiệt an toàn của chip.
+Công suất tĩnh (Device Static Power / Quiescent): 0.143 W (chiếm 8%). Đây là năng lượng rò rỉ cơ bản của vi mạch khi cấp nguồn, mức này thấp và tối ưu.
+4. Kết luận
+Bài báo đã trình bày toàn bộ quy trình thiết kế, tối ưu hóa bằng chỉ thị tổng hợp mức cao và kiểm chứng đồng mô phỏng C/RTL cho bộ tăng tốc nhân ma trận theo khối tương thích luồng dữ liệu trên bo mạch Zynq-7000 ZC702. Kết quả thực nghiệm cho thấy việc kết hợp giao thức truyền luồng, kỹ thuật lưu đệm tái sử dụng dải ma trận ngang cùng bộ chỉ thị đã giải quyết nút thắt ở cổng bộ nhớ BRAM, đạt tốc độ xử lý 1 bước tích ngoài trên mỗi chu kỳ xung nhịp (), rút ngắn tổng thời gian tính toán ma trận 32 x 32 (khối 8 x 8) và giữ cố định tài nguyên DSP48E1 khi kích thước ma trận mở rộng. Bên cạnh đó, nhóm đã hoàn tất việc đóng gói IP và tích hợp thành công bộ tăng tốc blockmatmul vào hệ thống SoC hoàn chỉnh thông qua chuẩn giao tiếp AXI4-Stream và bộ điều khiển AXI DMA kết nối trực tiếp với vi xử lý ARM Cortex-A9 trên AMD Vivado. Trong bài báo cáo tiếp theo, sẽ tiến hành nạp bitstream thực tế lên bo mạch phần cứng ZC702 để kiểm chứng hoạt động thời gian thực dưới sự quản lý của hệ điều hành nhúng trên ARM, đồng thời khảo sát các kiểu dữ liệu dấu phẩy tĩnh độ rộng thấp (ap_int<8>, ap_int<16>) nhằm giảm chi phí DSP48E1 trên mỗi phép nhân.
+Tài liệu tham khảo:
+[1]   R. Kastner, J. Matai, and S. Neuendorffer, Parallel Programming for FPGAs: The HLS Book, University of California, San Diego, pp. 129 - 144, 2018. [Online]. Available: https://kastner.ucsd.edu/wp-content/uploads/2018/03/admin/pp4fpgas.pdf
+[2] Advanced Micro Devices, Inc. (AMD), Vitis High-Level Synthesis User Guide (UG1399), pp. 91, 2026. [Online]. Available: https://docs.amd.com/r/en-US/ug1399-vitis-hls
+[3]  Advanced Micro Devices, Inc. (AMD), ZC702 Evaluation Board for the Zynq-7000 XC7Z020 SoC User Guide (UG850), v1.7, pp. 14 - 18 2019. [Online]. Available: https://docs.amd.com/v/u/en-US/ug850-zc702-eval-bd
+[4]  Advanced Micro Devices, Inc. (AMD), HLS Stream Library and Array Reshaping Directives (UG1399), pp. 739 - 741, 2026. [Online]. Available: https://docs.amd.com/r/en-US/ug1399-vitis-hls/HLS-Stream-Library
+
+=== TABLES ===
+
+--- TABLE 1 ---
+THÔNG TIN BÀI BÁO | TÓM TẮT: Phép nhân ma trận (Matrix Multiplication) là phép tính toán quan trọng trong các ứng dụng xử lý tín hiệu số, thị giác máy tính và mạng nơ-ron học sâu, nhưng lại có độ phức tạp tính toán bậc ba  và chịu vấn đề về băng thông bộ nhớ trên các bộ vi xử lý tuần tự. Bài báo cáo này trình bày quy trình thiết kế, tối ưu hóa kiến trúc và đánh giá bộ tăng tốc phần cứng nhân ma trận theo khối (blockmatmul) tương thích giao thức truyền dữ liệu luồng (hls::stream) sử dụng công cụ tổng hợp mức cao AMD Vitis High-Level Synthesis 2023.1 trên nền tảng SoC Zynq-7000 ZC702. Thiết lập một quy trình kiểm thử, thực nghiệm, đối chiếu trực tiếp giữa thuật toán nhân ma trận thông thường (Baseline) và thuật toán nhân ma trận theo khối tích ngoài (Outer-Product Block Matrix) qua các kích thước ma trận N {8,16,32}, kích thước khối  và tổ hợp chỉ thị tối ưu hóa (PIPELINE, UNROLL, ARRAY_RESHAPE, ARRAY_PARTITION). Kết quả thực nghiệm chứng minh rằng kiến trúc phân khối kết hợp tái sử dụng dải dữ liệu ngang giúp cố định mức tiêu thụ tài nguyên tính toán ở ngưỡng 48 khối DSP48E1 (21.82%), 4 khối BRAM_18K và 4,585 FF (đối với khối 4 x 4), hoặc 192 khối DSP48E1 (87.27%), 8 khối BRAM_18K và 17,650 FF (đối với khối 8 x 8) bất kể kích thước ma trận N tăng gấp 4 lần, đồng thời đạt mức tăng tốc độ trễ lên tới 15.9 lần ở cấu hình N = 32, B = 8 sau khi áp dụng directives.
+Ngày nhận bài: 17/10/2026 Ngày hoàn thiện: 30/10/2026 Ngày chấp nhận đăng: Ngày đăng: TỪ KHÓA | TÓM TẮT: Phép nhân ma trận (Matrix Multiplication) là phép tính toán quan trọng trong các ứng dụng xử lý tín hiệu số, thị giác máy tính và mạng nơ-ron học sâu, nhưng lại có độ phức tạp tính toán bậc ba  và chịu vấn đề về băng thông bộ nhớ trên các bộ vi xử lý tuần tự. Bài báo cáo này trình bày quy trình thiết kế, tối ưu hóa kiến trúc và đánh giá bộ tăng tốc phần cứng nhân ma trận theo khối (blockmatmul) tương thích giao thức truyền dữ liệu luồng (hls::stream) sử dụng công cụ tổng hợp mức cao AMD Vitis High-Level Synthesis 2023.1 trên nền tảng SoC Zynq-7000 ZC702. Thiết lập một quy trình kiểm thử, thực nghiệm, đối chiếu trực tiếp giữa thuật toán nhân ma trận thông thường (Baseline) và thuật toán nhân ma trận theo khối tích ngoài (Outer-Product Block Matrix) qua các kích thước ma trận N {8,16,32}, kích thước khối  và tổ hợp chỉ thị tối ưu hóa (PIPELINE, UNROLL, ARRAY_RESHAPE, ARRAY_PARTITION). Kết quả thực nghiệm chứng minh rằng kiến trúc phân khối kết hợp tái sử dụng dải dữ liệu ngang giúp cố định mức tiêu thụ tài nguyên tính toán ở ngưỡng 48 khối DSP48E1 (21.82%), 4 khối BRAM_18K và 4,585 FF (đối với khối 4 x 4), hoặc 192 khối DSP48E1 (87.27%), 8 khối BRAM_18K và 17,650 FF (đối với khối 8 x 8) bất kể kích thước ma trận N tăng gấp 4 lần, đồng thời đạt mức tăng tốc độ trễ lên tới 15.9 lần ở cấu hình N = 32, B = 8 sau khi áp dụng directives.
+Từ khóa 1: Nhân ma trận theo khối Từ khóa 2: Tổng hợp mức cao, Từ khóa 3: Vitis HLS Từ khóa 4: FPGA Zynq-7000 ZC702 Từ khóa 5: Đánh đổi hiệu suất và tài nguyên | TÓM TẮT: Phép nhân ma trận (Matrix Multiplication) là phép tính toán quan trọng trong các ứng dụng xử lý tín hiệu số, thị giác máy tính và mạng nơ-ron học sâu, nhưng lại có độ phức tạp tính toán bậc ba  và chịu vấn đề về băng thông bộ nhớ trên các bộ vi xử lý tuần tự. Bài báo cáo này trình bày quy trình thiết kế, tối ưu hóa kiến trúc và đánh giá bộ tăng tốc phần cứng nhân ma trận theo khối (blockmatmul) tương thích giao thức truyền dữ liệu luồng (hls::stream) sử dụng công cụ tổng hợp mức cao AMD Vitis High-Level Synthesis 2023.1 trên nền tảng SoC Zynq-7000 ZC702. Thiết lập một quy trình kiểm thử, thực nghiệm, đối chiếu trực tiếp giữa thuật toán nhân ma trận thông thường (Baseline) và thuật toán nhân ma trận theo khối tích ngoài (Outer-Product Block Matrix) qua các kích thước ma trận N {8,16,32}, kích thước khối  và tổ hợp chỉ thị tối ưu hóa (PIPELINE, UNROLL, ARRAY_RESHAPE, ARRAY_PARTITION). Kết quả thực nghiệm chứng minh rằng kiến trúc phân khối kết hợp tái sử dụng dải dữ liệu ngang giúp cố định mức tiêu thụ tài nguyên tính toán ở ngưỡng 48 khối DSP48E1 (21.82%), 4 khối BRAM_18K và 4,585 FF (đối với khối 4 x 4), hoặc 192 khối DSP48E1 (87.27%), 8 khối BRAM_18K và 17,650 FF (đối với khối 8 x 8) bất kể kích thước ma trận N tăng gấp 4 lần, đồng thời đạt mức tăng tốc độ trễ lên tới 15.9 lần ở cấu hình N = 32, B = 8 sau khi áp dụng directives.
+
+--- TABLE 2 ---
+Thành phần tài nguyên trên miền khả trình (PL) | Quỹ tài nguyên tối đa của xc7z020clg484-1 | Đặc tính vật lý và ảnh hưởng tới thiết kế bộ tăng tốc nhân ma trận
+Khối xử lý tín hiệu số (DSP48E1) | 220 khối | Mỗi bộ nhân 18x25-bit có sẵn; một phép nhân số nguyên 32-bit (int) tiêu tốn 3 khối DSP48E1 ghép tầng
+Bộ nhớ khối (BRAM_18K) | 280 khối (140 khối 36Kb) | Mỗi khối RAM vật lý chỉ cung cấp tối đa 2 cổng đọc/ghi độc lập trong mỗi chu kỳ xung nhịp
+Thanh ghi (Flip-Flops - FF) | 106,400 thanh ghi | Lưu trữ trạng thái đường ống (Pipeline Registers) và các mảng nhỏ được phân hoạch
+Bảng tra logic (Look-Up Tables - LUT) | 53,200 bảng tra | Thực hiện mạch tổ hợp, bộ cộng, bộ ghép kênh (MUX) và bộ nhớ phân tán (LUTRAM)
+
+--- TABLE 3 ---
+Chỉ thị tối ưu hóa (HLS Pragma) | Đối tượng áp dụng | Cơ chế biến đổi kiến trúc phần cứng trên Vitis HLS
+#pragma HLS ARRAY_RESHAPE | variable=A complete dim=1 | Gộp B phần tử theo cột của mảng đệm A[BLOCK_SIZE][N] thành một từ dữ liệu rộng , cho phép xuất toàn bộ vector cột trong 1 chu kỳ
+#pragma HLS ARRAY_PARTITION | variable=AB complete dim=0 | Phân tách mảng 2 chiều AB[BLOCK_SIZE][BLOCK_SIZE] thành B2 thanh ghi Flip-Flop rời rạc (16 thanh ghi với B = 4; 64 thanh ghi với B = 8)
+#pragma HLS PIPELINE II=1 | LOAD_A_COL, PARTIAL_SUM_K, WRITE_OUT_COL | Thiết lập đường ống phần cứng với khoảng khởi tạo  chu kỳ; tại PARTIAL_SUM_K, mỗi chu kỳ xung nhịp hoàn tất trọn vẹn một phép tích ngoài kích thước B x B
+#pragma HLS UNROLL | INIT_AB, LOAD_A_ROW, PARTIAL_SUM_I/J | Trải phẳng các vòng lặp con kích thước B, nhân bản phần cứng tạo thành mảng B2 bộ nhân – cộng (MAC) hoạt động song song
+
+--- TABLE 4 ---
+Solution | Latency_Min | Latency_Avg | Latency_Max | II_Min | II_Max
+sol_baseline_N16_NO_DIR | 2060 | 2060 | 2060 | 2061 | 2061
+sol_baseline_N16_WITH_DIR | 264 | 264 | 264 | 265 | 265
+sol_baseline_N32_NO_DIR | 16398 | 16398 | 16398 | 16399 | 16399
+sol_baseline_N32_WITH_DIR | 1033 | 1033 | 1033 | 1034 | 1034
+sol_baseline_N8_NO_DIR | 263 | 263 | 263 | 264 | 264
+sol_baseline_N8_WITH_DIR | 71 | 71 | 71 | 72 | 72
+sol_block_N16_B4_NO_DIR | 302 | 312 | 321 | 303 | 322
+sol_block_N16_B4_WITH_DIR | 45 | 55 | 64 | 46 | 65
+sol_block_N16_B8_NO_DIR | 1167 | 1177 | 1186 | 1168 | 1187
+sol_block_N16_B8_WITH_DIR | 94 | 104 | 113 | 95 | 114
+sol_block_N32_B4_NO_DIR | 558 | 576 | 593 | 559 | 594
+sol_block_N32_B4_WITH_DIR | 61 | 79 | 96 | 62 | 97
+sol_block_N32_B8_NO_DIR | 2191 | 2209 | 2226 | 2192 | 2227
+sol_block_N32_B8_WITH_DIR | 110 | 128 | 145 | 111 | 146
+sol_block_N8_B4_NO_DIR | 174 | 180 | 185 | 175 | 186
+sol_block_N8_B4_WITH_DIR | 37 | 43 | 48 | 38 | 49
+sol_block_N8_B8_NO_DIR | 667 | 667 | 667 | 668 | 668
+sol_block_N8_B8_WITH_DIR | 97 | 97 | 97 | 98 | 98
+
+--- TABLE 5 ---
+Solution | BRAM_18K | DSP48E1 | FF | LUT
+sol_baseline_N16_NO_DIR | 0 | 6 | 1583 | 1544
+sol_baseline_N16_WITH_DIR | 0 | 48 | 4572 | 2027
+sol_baseline_N32_NO_DIR | 0 | 6 | 2080 | 2639
+sol_baseline_N32_WITH_DIR | 0 | 96 | 9108 | 3892
+sol_baseline_N8_NO_DIR | 0 | 6 | 1035 | 950
+sol_baseline_N8_WITH_DIR | 0 | 24 | 2316 | 1099
+sol_block_N16_B4_NO_DIR | 0 | 6 | 2048 | 7353
+sol_block_N16_B4_WITH_DIR | 4 | 48 | 4585 | 7994
+sol_block_N16_B8_NO_DIR | 2 | 6 | 5636 | 12882
+sol_block_N16_B8_WITH_DIR | 8 | 192 | 17649 | 17570
+sol_block_N32_B4_NO_DIR | 4 | 6 | 1923 | 7324
+sol_block_N32_B4_WITH_DIR | 4 | 48 | 4588 | 7997
+sol_block_N32_B8_NO_DIR | 10 | 6 | 5383 | 12830
+sol_block_N32_B8_WITH_DIR | 8 | 192 | 17652 | 17582
+sol_block_N8_B4_NO_DIR | 0 | 6 | 2045 | 7325
+sol_block_N8_B4_WITH_DIR | 4 | 48 | 4582 | 7982
+sol_block_N8_B8_NO_DIR | 2 | 6 | 5634 | 12854
+sol_block_N8_B8_WITH_DIR | 8 | 192 | 17646 | 17568

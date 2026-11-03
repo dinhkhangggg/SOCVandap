@@ -1,0 +1,144 @@
+Giới thiệu bài Lab
+Lab 4 hướng dẫn quy trình tạo và tích hợp IP Core tùy chỉnh trên nền tảng Zynq SoC bằng nhiều phương pháp khác nhau gồm HDL, MathWorks HDL Coder và Vivado HLS. Sinh viên sẽ làm quen với giao tiếp AXI-Lite, đóng gói IP và kết nối IP với hệ thống Zynq trong Vivado IP Integrator.
+Mục tiêu bài Lab
++ Hiểu quy trình tạo và đóng gói IP Core tương thích AXI-Lite.
++ Thiết kế IP bằng HDL, Simulink HDL Coder và Vivado HLS.
++ Kết nối IP với Zynq Processing System thông qua AXI Interface.
++ Tạo ứng dụng điều khiển phần cứng từ phía PS.
++ Làm quen với quy trình Hardware/Software Co-design trên SoC FPGA.
+Công cụ cần thiết
+Phần cứng
+ZedBoard Zynq-7020
+Phần mềm
+Xilinx Vivado
+Vivado HLS
+MATLAB
+Simulink
+HDL Coder
+Xilinx SDK
+Kết quả đạt được
+Tạo và đóng gói thành công custom IP trên Zynq SoC.
+Tích hợp IP vào Vivado IP Integrator.
+Điều khiển phần cứng FPGA từ phần mềm chạy trên ARM Processor.
+Sinh HDL tự động từ Simulink và C/C++.
+Hiểu quy trình phát triển hệ thống nhúng FPGA SoC.
+Phần công việc thực hiện
+B. Thực hành
+Bài tập 4A: Tạo IP bằng ngôn ngữ mô tả phần cứng (Verilog HDL)
+Khối điều khiển LED
+Hình 1: Kiến trúc và tham số của khối điều khiển led
+1. Giao diện cổng tín hiệu (Ports & Interfaces)
+Khối IP có hai nhóm tín hiệu chính:
+Giao diện AXI-Lite Slave (S00_AXI): Bus giao tiếp 32-bit theo chuẩn AMBA AXI4-Lite, được dùng để hệ thống Zynq PS gửi dữ liệu điều khiển xuống. Khi mở rộng cấu trúc bus này trên Block Design, ta có thể thấy rõ 5 kênh giao tiếp độc lập (Write Address, Write Data, Write Response, Read Address, Read Data) điển hình của chuẩn AXI. Các tín hiệu quan trọng bao gồm:
+s00_axi_aclk: Xung nhịp hệ thống cho bus AXI.
+s00_axi_aresetn: Tín hiệu reset tích cực mức thấp (active-low) đồng bộ với xung nhịp.
+s00_axi_awaddr, s00_axi_wdata, v.v.: Các tín hiệu ghi/đọc địa chỉ và dữ liệu.
+Cổng xuất dữ liệu người dùng (LEDs_out[7:0]): Cổng đầu ra 8-bit mà tự thêm vào mã nguồn Verilog/VHDL ở các bước trước, cổng này được dùng để điều khiển trực tiếp 8 đèn LED vật lý trên board mạch ZC702 thông qua file cấu hình chân XDC.
+2. Các tham số cấu hình (Customization Parameters)
+Bảng thông số bên phải (Re-customize IP) cho thấy các giá trị cấu hình (Generics/Parameters) mặc định của
+khối IP:
+C_S00_AXI_DATA_WIDTH = 32: Độ rộng kênh dữ liệu của bus AXI-Lite là 32 bit phù hợp với kiến trúc 32-bit của vi xử lý Zynq-7000.
+C_S00_AXI_ADDR_WIDTH = 4: Độ rộng kênh địa chỉ là 4 bit tức là khối IP có không gian địa chỉ là  byte. Vì mỗi thanh ghi 32-bit chiếm 4 byte, không gian này vừa đủ để chứa 4 thanh ghi (register 0, 1, 2, 3) mà đã cấu hình lúc khởi tạo IP bằng công cụ Create and Package IP.
+C_S00_AXI_BASEADDR & C_S00_AXI_HIGHADDR: Hiển thị giá trị chưa xác định (0xFFFFFFFF và 0x00000000), các địa chỉ này sẽ được Vivado tự động cấp phát (auto-assign) trong tab Address Editor sau khi chạy Run Connection Automation. Phần mềm điều khiển C trên Vitis sẽ dựa vào địa chỉ cơ sở này (được xuất ra file xparameters.h) để ghi dữ liệu xuống thanh ghi 0 của IP, từ đó bật/tắt các đèn LED tương ứng.
+Sơ đồ khối hệ thống điều khiển LED
+Hình 2: Sơ đồ khối hệ thống điều khiển LED
+Hệ thống được cấu thành từ 4 khối chức năng chính:
+ZYNQ7 Processing System (processing_system7_0): bộ xử lý trung tâm ARM Cortex-A9 điều khiển toàn bộ hệ thống, xuất xung FCLK_CLK0 (thường là 50MHz) và tín hiệu reset FCLK_RESET0_N để cấp cho toàn bộ vùng PL. Lệnh điều khiển dữ liệu được phát ra qua cổng giao tiếp M_AXI_GP0 (General Purpose Master AXI). Các cổng DDR và FIXED_IO kết nối trực tiếp với bộ nhớ RAM và các ngoại vi cứng cố định ngoài chip.
+Bộ định tuyến AXI Interconnect (ps7_0_axi_periph): Cầu nối (router) trung gian, trong kiến trúc vi mạch số, khối này giải mã địa chỉ, phân xử tín hiệu và định tuyến dữ liệu từ một Master (cổng S00_AXI nhận từ Zynq PS) đến một hoặc nhiều Slave (cổng M00_AXI đẩy tới bộ điều khiển LED).
+Bộ đồng bộ Reset (rst_ps7_0_50M): Ngăn chặn hiện tượng metastable. Nó nhận tín hiệu reset không đồng bộ từ PS (ext_reset_in) và xung nhịp (slowest_sync_clk), từ đó tạo ra tín hiệu reset tích cực mức thấp (peripheral_aresetn) đã được đồng bộ hóa hoàn toàn với xung nhịp của phần cứng. Tín hiệu này đảm bảo toàn bộ bus AXI và IP ngoại vi khởi động ở trạng thái an toàn.
+Custom IP Core (led_controller_0): Đóng vai trò là AXI Slave, nhận xung nhịp s00_axi_aclk, tín hiệu reset s00_axi_aresetn và luồng dữ liệu từ Interconnect thông qua cổng S00_AXI, dữ liệu sau khi giải mã giao thức sẽ được chốt vào thanh ghi nội bộ và xuất ra cổng LEDs_out[7:0].
+Đường dẫn tín hiệu (Data Path) của hệ thống đi từ trái qua phải. Khi mã C gọi hàm ghi dữ liệu vào thanh ghi, lệnh này xuất phát từ Zynq PS qua bus M_AXI_GP0, đi xuyên qua AXI Interconnect để đến giao diện S00_AXI của bộ điều khiển LED. Cuối cùng, tín hiệu số được đẩy ra cổng ngoại vi LEDs_out_0[7:0] (tên cổng đã được cấu hình trùng khớp với tệp XDC) để điều khiển 8 bóng LED vật lý trên board mạch.
+Giải thích cách mã Verilog can thiệp vào tệp AXI-Lite được tạo tự động để đưa tín hiệu LEDs_out ra ngoài.
+Mã Verilog can thiệp vào cấu trúc AXI-Lite tự động sinh ra thông qua hai bước thiết kế chính để định tuyến tín hiệu từ thanh ghi nội bộ ra bên ngoài:
+Tại tệp giao diện lõi (_S00_AXI.v): Khai báo thêm cổng đầu ra LEDs_out 8-bit. Sau đó, sử dụng lệnh gán liên tục để nối cổng này trực tiếp với 8 bit thấp của thanh ghi phần mềm, ví dụ assign LEDs_out = slv_reg0[7:0];. Nhờ lệnh này, mọi dữ liệu mà vi xử lý (CPU) ghi vào thanh ghi slv_reg0 qua bus AXI sẽ lập tức được đẩy ra cổng của module lõi.
+Tại tệp mức cao nhất (top-level .v): Tiếp tục khai báo cổng LEDs_out ở lớp vỏ để tạo chân cắm giao tiếp cho toàn bộ khối IP. Cuối cùng, tại phần khởi tạo module lõi (instantiation), sử dụng kỹ thuật ánh xạ cổng (port mapping) để nối trực tiếp cổng LEDs_out của lõi bên trong ra cổng LEDs_out của lớp vỏ bên ngoài.
+Quá trình này giúp dẫn xuất tín hiệu điện áp từ một thanh ghi nhớ nằm sâu bên trong giao thức AXI ra thẳng chân giao tiếp vật lý của khối IP trên sơ đồ Block Design.
+Ánh xạ chân (Pin Mapping) với tệp XDC cho board mạch ZC702
+Hình 3: Tệp XDC cho các chân LED
+Tệp ràng buộc vật lý (XDC - Xilinx Design Constraints) đóng vai trò là cầu nối giữa các cổng logic (logical ports) trong phần mềm và chân vật lý (physical pins) của chip FPGA trên board mạch.
+Đối với mạch ZC702, 8 đèn LED của phần Programmable Logic (PL) không có đường dẫn riêng biệt mà được mắc song song với các chân tín hiệu của các header PMOD1 và PMOD2 (đèn DS15 đến DS22).
+Trong tệp led_constraints.xdc, lệnh set_property PACKAGE_PIN được sử dụng để ánh xạ từng bit của mảng LEDs_out_0[7:0] tới các chân tương ứng (ví dụ: bit 0 vào chân E15, bit 1 vào chân D15,...).
+Đồng thời, lệnh set_property IOSTANDARD thiết lập chuẩn điện áp cho các chân này là LVCMOS25 (2.5V), phù hợp với đặc tả phần cứng của ZC702, nhằm đảm bảo tín hiệu toàn vẹn và tránh lỗi DRC (Design Rule Check) khi tiến hành tạo luồng Bitstream.
+Luồng thiết kế phần mềm C trên Vitis IDE 2023.1
+Xuất thông số phần cứng (Export Hardware): Sau khi Vivado tạo thành công file Bitstream, toàn bộ thông tin phần cứng (kiến trúc, bản đồ địa chỉ IP, trình điều khiển) được xuất ra dưới định dạng tệp nén .xsa (Xilinx Support Archive).
+Xây dựng Platform Project: Vitis IDE nạp tệp .xsa để tạo Platform. Quá trình biên dịch (Build Platform) sẽ tự động tạo ra Board Support Package (BSP) và trình khởi động First Stage Boot Loader (FSBL). BSP chứa các thư viện chuẩn (C library) và tập tin xparameters.h, nơi định nghĩa địa chỉ cơ sở (BASEADDR) của khối IP điều khiển LED được cấp phát trên bus AXI.
+Hình 4: Giao diện Platform Project
+Phát triển Application Project: Một dự án ứng dụng C (Empty Application) được khởi tạo dựa trên Platform vừa tạo. Trong mã nguồn main.c, các thư viện xparameters.h và xil_io.h được gọi để thực thi các thao tác vào/ra mức thấp. Hàm Xil_Out32(LED_BASEADDR, giá_trị) được sử dụng để ghi một giá trị nguyên (thường được đặt trong một vòng lặp tăng dần) xuống thanh ghi slv_reg0 của IP.
+Hình 5: Mã nguồn main.c
+Thực thi và kiểm thử: Ứng dụng C được biên dịch ra tệp nhị phân ELF. Phần mềm tiến hành nạp Bitstream xuống phần PL của FPGA, sau đó nạp tệp ELF vào phần PS để thực thi. Thông qua giao diện Vitis Serial Terminal, các tiến trình có thể được theo dõi (Debug) và kết quả hiển thị trực quan thông qua sự nhấp nháy của các đèn LED trên board ZC702.
+Bài Tập 4B: Tạo IP bằng MathWorks HDL Coder
+Giới thiệu mô hình bộ lọc khử nhiễu LMS trên Simulink
+Hình 6: Mô hình lọc khử nhiễu LMS
+Mô hình Simulink này mô tả cấu trúc của một hệ thống lọc khử nhiễu thích nghi sử dụng thuật toán Least Mean Squares (LMS), được thiết kế đặc biệt để chuẩn bị cho quá trình chuyển đổi sang mã RTL (phần cứng vi mạch). Kiến trúc hệ thống được chia thành 4 giai đoạn xử lý luồng tín hiệu chính:
+Tạo nguồn tín hiệu và trộn nhiễu: Hệ thống sử dụng hai nguồn tín hiệu độc lập, bao gồm một tín hiệu âm thanh đầu vào (audio_in) và một nguồn tạo nhiễu dạng sóng sin (DSP Sine Wave). Tín hiệu nhiễu này được cộng trực tiếp với âm thanh gốc thông qua khối toán học (dấu +) để giả lập một tín hiệu âm thanh bị suy hao/lẫn tạp âm. Tín hiệu sau khi trộn tiếp tục được phân nhánh đưa vào khối corrupt_audio.
+Chuyển đổi kiểu dữ liệu (Data Type Conversion): Đây là bước chuẩn hóa dữ liệu bắt buộc để bộ tổng hợp phần cứng HDL Coder có thể hoạt động. Hai khối convert được đặt trước bộ lọc LMS để chuyển đổi tín hiệu từ định dạng dấu phẩy động độ phân giải kép (double) sang định dạng số dấu phẩy tĩnh (sfix16_En14). Định dạng sfix16_En14 đại diện cho kiểu dữ liệu có dấu (signed), tổng độ dài 16-bit với 14-bit dành cho phần thập phân, giúp tối ưu hóa tài nguyên logic trên FPGA.
+Xử lý (LMS Subsystem): Khối trung tâm LMS là bộ lọc thích nghi nhận hai ngõ vào đã được chuẩn hóa fixed-point. Ngõ vào x(k) nhận tín hiệu nhiễu tham chiếu trực tiếp từ bộ tạo sóng sin. Ngõ vào d(k) nhận tín hiệu âm thanh đã bị trộn nhiễu. Thuật toán LMS bên trong sẽ điều chỉnh trọng số để triệt tiêu tối đa thành phần nhiễu x(k) ra khỏi d(k), tạo ra tín hiệu sai số e(k) ở định dạng sfix16_En14. Trong ứng dụng khử nhiễu âm thanh, e(k) chính là tín hiệu âm thanh sạch sau khi đã được lọc.
+Giám sát và xuất dữ liệu: Tín hiệu đầu ra e(k) được đưa qua khối filtered_audio để xuất trở lại không gian làm việc (Workspace) của phần mềm. Khối màn hình đa kênh Scope được sử dụng để thu thập đồng thời ba tín hiệu: nhiễu tham chiếu (sfix16_En14), âm thanh bị trộn nhiễu (double) và âm thanh đã được lọc sạch e(k) (sfix16_En14), giúp người thiết kế trực quan hóa dạng sóng và đánh giá hiệu năng hội tụ của thuật toán.
+Lợi ích của việc dùng công cụ mô phỏng toán học để sinh mã RTL tự động.
+Thiết kế và trực quan hóa ở mức hệ thống (System-level Design): Thay vì viết mã Verilog/VHDL thủ công phức tạp thì có thể xây dựng kiến trúc bằng cách ghép nối các khối toán học đồ họa (như bộ lọc LMS, khối cộng tín hiệu) trên môi trường Simulink giúp kỹ sư tập trung hoàn toàn vào việc tối ưu thuật toán.
+Xác minh thuật toán sớm (Early Algorithm Verification): Cho phép mô phỏng để kiểm chứng tính đúng đắn của thuật toán ngay trên phần mềm trước khi tiến hành tổng hợp phần cứng. Ví dụ, thiết kế có thể đánh giá trực tiếp hiệu năng hội tụ của bộ lọc qua khối Scope hoặc nghe thử chất lượng âm thanh sau khi khử nhiễu để tinh chỉnh tham số.
+Tối ưu hóa kiểu dữ liệu phần cứng (Fixed-point Conversion): Vi mạch phần cứng xử lý định dạng số thực dấu phẩy động (floating-point) tốn tài nguyên logic. Công cụ mô phỏng cung cấp các khối chuyển đổi dữ liệu (Data Type Conversion) để ép kiểu về định dạng số dấu phẩy tĩnh (fixed-point) nhằm tối ưu hóa diện tích và tài nguyên xử lý trên chip FPGA.
+Tự động hóa sinh mã và chuẩn hóa giao tiếp (Automated RTL & Interface Generation): Công cụ HDL Workflow Advisor tự động dịch mô hình khối thành mã RTL (VHDL/Verilog) giúp triệt tiêu lỗi cú pháp do con người. Đồng thời, nó hỗ trợ tự động suy luận các cổng tín hiệu thành chuẩn giao tiếp hệ thống như AXI4-Lite. Nhờ đó, lõi IP được đóng gói hoàn chỉnh, tương thích với Vivado IP Catalog và sẵn sàng tích hợp vào kiến trúc SoC.
+Rút ngắn chu kỳ phát triển (Rapid Prototyping): Việc thay đổi cấu trúc toán học hoặc thông số bộ lọc và xuất lại thành một IP Core mới diễn ra rất nhanh chóng. Phương pháp này giúp đẩy nhanh quá trình nguyên mẫu hóa và giảm thiểu đáng kể thời gian gỡ lỗi (debugging) so với luồng thiết kế RTL truyền thống.
+Cấu hình thiết lập
+Hình 7; Cấu hình thiết lập cho khối IP LMS
+Processor/FPGA synchronization (Đồng bộ hóa vi xử lý/FPGA): Chọn chế độ “Coprocessing - blocking”. Thiết lập này định nghĩa lõi IP LMS sẽ hoạt động như một bộ đồng xử lý (coprocessor) cho CPU. Chữ “blocking” có nghĩa là khi phần mềm C trên Zynq PS gửi dữ liệu xuống IP này để xử lý, phần mềm sẽ tạm dừng (block/wait) cho đến khi IP hoàn tất việc tính toán và trả kết quả về, đảm bảo tính đồng bộ dữ liệu nghiêm ngặt.
+Generate default AXI4 slave interface: Tùy chọn này đang được tự động đánh dấu tick (màu xám). Do chọn chế độ Coprocessing, phần mềm tự động ép buộc khối IP phải sử dụng giao thức AXI4-Lite (hoạt động ở chế độ Slave) để nhận lệnh và trao đổi dữ liệu với Zynq PS.
+Target platform interface table (Bảng ánh xạ giao diện): Bảng này là nơi công cụ tự động chuyển đổi các cổng tín hiệu của bộ lọc LMS trong Simulink thành các thanh ghi vật lý có địa chỉ cụ thể trên bus AXI4-Lite:
+Cổng đầu vào x(k) (nhiễu tham chiếu - kiểu dữ liệu sfix16_En...) được ánh xạ thành một thanh ghi ghi/đọc tại địa chỉ offset là x“100” (mã hex).
+Cổng đầu vào d(k) (âm thanh nhiễu - kiểu dữ liệu sfix16_En...) được ánh xạ tại địa chỉ offset x“104”.
+Cổng đầu ra e(k) (âm thanh đã lọc - kiểu dữ liệu sfix16_En...) được ánh xạ tại địa chỉ offset x“108”.
+Khoảng cách địa chỉ (Address Spacing): Các địa chỉ offset (100, 104, 108) cách nhau 4 byte (32 bit). Mặc dù tín hiệu Simulink dùng kiểu dữ liệu 16-bit (sfix16), chuẩn AXI4-Lite trên kiến trúc Zynq sử dụng kênh dữ liệu 32-bit, do đó công cụ cấp phát một thanh ghi 32-bit nguyên vẹn cho mỗi cổng tín hiệu để tuân thủ đúng giao thức.
+Thiết lập này chính là quá trình tự động hóa thao tác “luồn dây” và gán thanh ghi mà đã viết thủ công bằng mã Verilog (assign LEDs_out = slv_reg0[7:0];) ở Bài tập 4A. Nhờ HDL Coder, hệ thống tự động sinh ra cấu trúc thanh ghi và bộ giải mã địa chỉ AXI, giúp tập trung hoàn toàn vào việc phát triển thuật toán vi mạch lõi.
+Hình 8: Báo cáo tóm tắt quá trình tạo mã HDL
+Bài Tập 4C: Tổng hợp mức cao với Vitis HLS (High-Level Synthesis)
+Cách sử dụng thư viện ap_fixed.h để tối ưu hóa tài nguyên phần cứng cho Bộ dao động NCO.
+Hình 9: Code nco.cpp
+Trong thiết kế Vitis HLS, thư viện ap_fixed.h được khai báo ở dòng 1 để hỗ trợ kiểu dữ liệu dấu phẩy tĩnh (fixed-point) tùy chỉnh trong C++. Đối với vi xử lý thông thường, việc tính toán số thực (float/double) rất dễ dàng, nhưng khi tổng hợp thành phần cứng FPGA, các phép toán dấu phẩy động theo chuẩn IEEE 754 sẽ tiêu tốn một lượng khổng lồ tài nguyên logic và độ trễ (latency) rất cao. Thư viện này chính là chìa khóa để giải quyết vấn đề đó.
+Tại dòng 7, mảng hằng số sine_lut[4096] lưu trữ bảng tra cứu (Look-Up Table) của sóng sin được khai báo với kiểu dữ liệu ap_fixed<16,2>. Dựa trên chú thích từ dòng 3 đến 6, cấu trúc của kiểu dữ liệu này được phân bổ như sau:
+Tổng độ dài từ (Word Length) là 16 bit.
+Độ dài phần nguyên (Integer Length) là 2 bit (bao gồm 1 bit dấu và 1 bit biên độ).
+Độ dài phần thập phân (Fractional Length) là 14 bit (được tính bằng).
+Việc áp dụng kiểu dữ liệu ap_fixed<16,2> này mang lại 3 ưu điểm tối ưu hóa phần cứng cho khối NCO:
+Tối ưu hóa không gian bộ nhớ (Block RAM): Bảng tra cứu sine_lut chứa 4096 mẫu dữ liệu. Nếu sử dụng kiểu float 32-bit tiêu chuẩn, mảng này sẽ chiếm tới 131.072 bit. Cách giới hạn độ rộng xuống 16-bit thông qua ap_fixed, dung lượng ROM yêu cầu được giảm đi chính xác một nửa (còn 65.536 bit), giúp tiết kiệm trực tiếp số lượng khối BRAM trên Zynq SoC.
+Tối ưu hóa khối tính toán DSP (Digital Signal Processing): Các phép toán trên kiểu dữ liệu fixed-point về bản chất vật lý được thực thi giống toán học số nguyên (integer arithmetic). Kiến trúc FPGA của Xilinx sở hữu các khối DSP48 (với bộ nhân  bit). Độ rộng 16-bit của mảng này đảm bảo mọi phép nhân/cộng tín hiệu NCO tiếp theo sẽ trong một khối DSP duy nhất và hoàn tất chỉ trong 1 chu kỳ xung nhịp (clock cycle), thay vì phải ghép nối (cascade) nhiều khối hoặc dùng hàng nghìn LUT để tính toán số float.
+Tối ưu hóa dải động (Dynamic Range) cho sóng Sin: Giá trị biên độ của một hàm sin tiêu chuẩn luôn dao động trong khoảng [-1, 1]. Việc cấu hình 2 bit phần nguyên là sự tính toán rất kỹ lưỡng: 1 bit dùng để xác định dấu âm/dương và 1 bit dùng để biểu diễn giá trị 1. Sự phân bổ này bảo toàn trọn vẹn dải biên độ mà không lãng phí bất kỳ bit nào cho phần nguyên. 14 bit còn lại được dồn toàn lực cho phần thập phân, mang lại độ phân giải tín hiệu đạt mức , đảm bảo độ mịn (precision) cực cao cho tín hiệu NCO sinh ra.
+Hình 10: Báo cáo tóm tắt C Synthesis
+1. Đánh giá thời gian (Timing Estimate)
+Target (Mục tiêu): Chu kỳ xung nhịp được đặt ở mức 10.00 ns (tần số hoạt động 100 MHz).
+Estimated (Ước tính): Đường dẫn trễ nhất (critical path) trong thiết kế phần cứng chỉ mất 6.331 ns để hoàn tất.
+Mức ước tính 6.331 ns nhỏ hơn nhiều so với mục tiêu 10.00 ns, Slack dương chứng minh thiết kế đáp ứng tốt yêu cầu về Timing. Uncertainty là 2.70 ns được công cụ cộng thêm vào biên độ an toàn để bù trừ cho độ trễ định tuyến trên chip vật lý sau này. Hệ thống NCO hoàn toàn có thể chạy ổn định ở 100 MHz.
+2. Đánh giá Hiệu suất (Performance Estimates)
+Latency (Độ trễ): Khối nco có độ trễ chỉ mất 1 chu kỳ xung nhịp (Latency = 1 cycle / 10.000 ns). Nghĩa là từ khi nhận đầu vào step_size gần như ngay lập tức xuất ra giá trị sóng sin.
+Interval (Chu kỳ lặp): Giá trị Interval là 2. Điều này cho biết bộ NCO có thể tiếp nhận một luồng dữ liệu mới mỗi 2 chu kỳ xung nhịp.
+Pipelined: Trạng thái là “no”, đối với một bộ dao động tra bảng đơn giản, thao tác xử lý diễn ra rất nhanh nên việc không dùng Pipeline giúp tiết kiệm tài nguyên thanh ghi (Flip-Flops) mà không làm giảm đáng kể hiệu suất.
+3. Đánh giá sử dụng tài nguyên (Resource Estimates)
+BRAM (Block RAM): gồm 4 khối, bảng tra cứu sine_lut chứa 4096 giá trị 16-bit. Vitis HLS đã không dùng các cổng logic rời rạc mà tổng hợp toàn bộ mảng hằng số này vào 4 khối BRAM chuyên dụng (Block RAM) trên chip Zynq.
+DSP (Khối xử lý tín hiệu số): 0 khối. Thuật toán NCO chủ yếu dùng bộ cộng dồn pha (phase accumulator) và tra cứu địa chỉ mảng, không chứa các phép nhân phức tạp (), do đó không tiêu tốn bất kỳ khối DSP nào.
+FF (Flip-Flop) & LUT (Look-Up Table): 141 FF và 98 LUT. Con số này cực kỳ thấp. Phần lớn các LUT và FF này không dùng cho bản thân thuật toán NCO, mà được Vitis HLS sử dụng để xây dựng lớp vỏ giao tiếp AXI4-Lite (bao gồm máy trạng thái, thanh ghi địa chỉ, tín hiệu bắt tay valid/ready) để kết nối với Zynq PS.
+Nhìn chung, báo cáo này cho thấy IP nco được thiết kế rất tối ưu. Nó tiêu tốn lượng tài nguyên logic (LUT/FF) không đáng kể, tận dụng tốt bộ nhớ nhúng (BRAM) cho bảng tra cứu, xử lý cực nhanh (chỉ mất 1 xung nhịp) và đảm bảo an toàn tuyệt đối về tần số hoạt động (Timing).
+Đánh giá ưu và nhược điểm của 3 phương pháp
+1. Tạo IP bằng mã mô tả phần cứng truyền thống (Verilog/VHDL)
+Ưu điểm: Mang lại quyền kiểm soát tuyệt đối ở mức RTL. Quá trình tối ưu hóa diện tích (area), tài nguyên logic và công suất tiêu thụ đạt hiệu quả cao nhất. Phương pháp này lý tưởng để thiết kế các khối điều khiển I/O, bộ nhớ đệm, hoặc các cỗ máy trạng thái (FSM) đòi hỏi định thời chính xác đến từng chu kỳ xung nhịp (clock-cycle exact).
+Nhược điểm: Chu kỳ phát triển dài và dễ phát sinh lỗi logic. Việc triển khai và gỡ lỗi (debug) các thuật toán xử lý tín hiệu số hoặc toán học phức tạp bằng mã Verilog/VHDL thủ công tốn rất nhiều thời gian.
+2. Tạo IP bằng MathWorks HDL Coder (Mô hình Simulink)
+Ưu điểm: Môi trường thiết kế trực quan bằng sơ đồ khối cho phép xác minh và mô phỏng thuật toán ngay lập tức trước khi dùng đến phần cứng. Công cụ này xây dựng các bộ lọc DSP hoặc thuật toán viễn thông, hỗ trợ tự động hóa hoàn toàn quá trình chuyển đổi kiểu dữ liệu (từ floating-point sang fixed-point) và sinh giao diện AXI.
+Nhược điểm: Mã RTL do máy tự động sinh ra thường cồng kềnh, khó đọc hiểu và gần như không thể can thiệp để tối ưu hóa thủ công ở mức cổng logic (gate-level). Việc phát triển bị phụ thuộc hoàn toàn vào hệ sinh thái và bản quyền của MATLAB/Simulink.
+3. Tạo IP bằng Tổng hợp mức cao (Vitis HLS với C/C++)
+Ưu điểm: Tăng tốc độ nguyên mẫu hóa (rapid prototyping) bằng cách tận dụng các thuật toán C/C++ có sẵn. HLS tốt nhất ở khả năng khám phá không gian thiết kế nhanh: chỉ cần thay đổi các chỉ thị (Directives) như PIPELINE hay UNROLL có thể buộc công cụ tổng hợp ra một kiến trúc ưu tiên tốc độ xử lý hoặc ưu tiên tiết kiệm tài nguyên mà không cần viết lại thuật toán. Rất phù hợp để phát triển các khối tăng tốc phần cứng (Hardware Accelerators).
+Nhược điểm: Che khuất các chi tiết vật lý cấp thấp, làm giảm khả năng kiểm soát độ trễ định tuyến (routing delay) so với viết HDL. Dù viết bằng C/C++, bắt buộc phải có tư duy phần cứng sắc bén; nếu nạp một đoạn mã C viết theo phong cách phần mềm tuần tự thông thường vào HLS, hệ thống sẽ sinh ra một vi mạch tiêu tốn nhiều tài nguyên nhưng hiệu suất cực kỳ thấp.
+Kết Luận
+Kỹ năng thiết kế RTL và thao tác đóng gói IP (IP Packaging)
+Việc tự xây dựng lõi điều khiển ngoại vi bằng ngôn ngữ Verilog giúp làm rõ phương pháp can thiệp trực tiếp vào mã nguồn RTL. Kỹ năng trích xuất dữ liệu từ các thanh ghi nội bộ (software registers) và định tuyến ra chân giao tiếp vật lý (port mapping) được thực hành chi tiết. Cùng với đó, quy trình sử dụng IP Packager trên Vivado 2023.1 để đóng gói mã RTL thành một Custom IP hoàn chỉnh đã tạo tiền đề cho việc xây dựng các thư viện phần cứng có khả năng tái sử dụng cao.
+Làm chủ giao thức giao tiếp AMBA AXI4
+Quá trình phân tích mã nguồn và thiết lập sơ đồ khối đã làm sáng tỏ cơ chế hoạt động của giao thức AMBA AXI4-Lite. Khái niệm về Memory-Mapped I/O (Vào/Ra ánh xạ bộ nhớ) được ứng dụng thực tế để thiết lập cầu nối dữ liệu giữa hệ thống vi xử lý (Zynq PS - Master) và phần logic khả trình (PL - Slave). Việc cấu hình tự động phân xử địa chỉ qua AXI Interconnect giúp hệ thống hóa tư duy thiết kế bus giao tiếp trong các vi mạch SoC phức tạp.
+Thiết kế mức hệ thống và Tổng hợp mức cao (System-Level Design & HLS)
+Tiếp cận thành công các phương pháp luận thiết kế trừu tượng hóa mức cao để phát triển vi mạch tăng tốc phần cứng (Hardware Accelerators). Thông qua MathWorks HDL Coder và Vitis HLS, kỹ năng tối ưu hóa vi kiến trúc từ các thuật toán DSP (bộ lọc LMS, dao động NCO). Đặc biệt, việc ứng dụng kiểu dữ liệu số dấu phẩy tĩnh (fixed-point ap_fixed) và các chỉ thị phần cứng (INTERFACE s_axilite) cho thấy khả năng tối ưu hóa tài nguyên logic (BRAM, DSP48) và tần số hoạt động trực tiếp từ mã C/C++ hoặc sơ đồ khối Simulink mà không cần viết mã RTL thủ công.
+Vận hành luồng thiết kế Hardware/Software Co-design
+Nắm vững quy trình thiết kế liên cấp và liền mạch từ phần cứng đến phần mềm nhúng. Chu trình này bao gồm khởi tạo hệ thống trên Block Design, thiết lập tệp ràng buộc vật lý XDC cho các chuẩn điện áp I/O, tổng hợp Bitstream, xuất thông số phần cứng (.xsa) và phát triển ứng dụng điều khiển nhúng bare-metal bằng ngôn ngữ C trên môi trường Vitis IDE.
+Sự kết hợp đồng bộ giữa việc hiểu sâu phần cứng ở mức cổng logic và làm chủ quy trình lập trình điều khiển phần mềm mang lại một cái nhìn toàn cảnh về vòng đời phát triển của một hệ thống vi mạch SoC, sẵn sàng cho việc triển khai các đồ án kiến trúc máy tính và xử lý tín hiệu số quy mô lớn hơn trong tương lai.
+Ảnh nhóm:
+
+--- TABLE ---
+ | DEPARTMENT OF COMPUTER ENGINEERING (DCE) SOC DESIGN MMH: SOCD334264
+Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277 | Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277

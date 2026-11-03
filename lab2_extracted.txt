@@ -1,0 +1,212 @@
+Giới thiệu bài Lab
+Bài Lab tập trung vào thiết kế hệ thống Zynq SoC sử dụng hardware interrupts bằng Vivado IP Integrator và SDK/Vitis. Người học sẽ xây dựng hệ thống gồm AXI GPIO, AXI Timer và ARM Cortex-A9 để xử lý interrupt từ Push Buttons và Timer trên Zynq FPGA.
+Mục tiêu bài Lab
++ Hiểu cơ chế interrupt trong Zynq SoC
++ Thiết kế hệ thống interrupt-based trên FPGA SoC
++ Sử dụng AXI GPIO và AXI Timer
++ Cấu hình Fabric Interrupt giữa PL và PS
++ Viết chương trình xử lý interrupt trên ARM Cortex-A9
++ Kết nối nhiều nguồn interrupt bằng Concat IP
++ Điều khiển LEDs bằng interrupt-driven software
+Công cụ cần thiết
+Phần cứng
+ZedBoard hoặc PynQ-Z2
+USB JTAG/UART Cable
+Phần mềm
+Vivado Design Suite HLx 2019.2
+Vivado SDK / Vitis
+Kết quả đạt được
++ Xây dựng hệ thống Zynq sử dụng interrupt
++ Xử lý interrupt từ Push Buttons và Timer
++ Kết nối nhiều nguồn interrupt trong Zynq
++ Generate và nạp bitstream xuống FPGA
++ Chạy ứng dụng interrupt-driven trên ARM Cortex-A9
++ Hiểu nguyên lý interrupt trong FPGA SoC nhúng.
+Phần công việc thực hiện
+Thực hành
+Exercise 2A: Mở rộng thiết kế IP Integrator cơ bản
+Khởi động phần mềm Vivado bằng cách nhấp đúp vào biểu tượng Vivado trên màn hình hoặc điều hướng từ menu Start.
+Tại màn hình khởi động, nhấp vào Create New Project để mở trình hướng dẫn tạo dự án.
+Hình 1: Màn hình khởi động Vivado
+Trong hộp thoại Project Name, điền zynq_interrupts vào mục Project name và nhập D:/TK_SOC/zynq_interrupts vào mục Project location và tích chọn ô Create project subdirectory.
+Hình 2: Đặt tên project và vị trí lưu project
+Ở hộp thoại Project Type, chọn loại dự án là RTL Project và tùy chọn Do not specify sources at this time không được đánh dấu.
+Hình 3: Chọn loại dự án RTL Project
+Tại cửa sổ Add Sources, ở mục Target language,chọn Verilog. Nhấn Next và tiếp tục nhấn Next để bỏ qua các bước Add Existing IP (optional) và Add Constraints (optional).
+Hình 4: Lựa chọn ngôn ngữ lập trình cho project
+Tại hộp thoại Default Part, chọn mục Boards. Tìm trong danh sách và chọn ZedBoard Zynq Evaluation and Development Kit, Board Version c.
+Hình 5: Lựa chọn board ZedBoard Zynq Evaluation and Development Kit
+Tại cửa sổ New Project Summary, kiểm tra lại các cấu hình và nhấn Finish để hoàn tất khởi tạo dự án.
+Exercise 2B: Tạo hệ thống Zynq với ngắt trong Vivado
+1. Khởi tạo Block Design
+Trong cửa sổ Flow Navigator (bên trái màn hình), tìm đến phần IP Integrator và chọn Create Block Design.
+Tại hộp thoại hiện ra, nhập zynq_interrupt_system vào mục Design name và nhấn OK.
+Hình 6: Tạo Block Designed
+2. Thêm và cấu hình bộ vi xử lý Zynq (Zynq PS)
+Nhấp chuột phải vào không gian làm việc trống (Diagram canvas) và chọn Add IP... (hoặc nhấn Ctrl+I).
+Nhập từ khóa zynq vào ô tìm kiếm, chọn ZYNQ7 Processing System (phiên bản 5.4) và nhấn Enter để thêm vào thiết kế.
+Nhấn vào tùy chọn Run Block Automation xuất hiện ở dải thông báo phía trên vùng làm việc. Nhấn OK và tùy chọn Apply Board Preset đã được chọn để phần mềm tự động tạo các kết nối bên ngoài cho giao diện DDR và FIXED_IO.
+Hình 7: Thêm và cấu hình bộ vi xử lý Zynq (Zynq PS)
+3. Thêm và kết nối các khối ngoại vi (AXI GPIO)
+Nhấp chuột phải vào không gian trống, chọn Add IP, gõ từ khóa GPIO và thêm một khối AXI GPIO vào thiết kế. Lặp lại bước này để có tổng cộng 2 khối AXI GPIO.
+Chọn Run Connection Automation trên dải thông báo, chọn /axi_gpio_0/S_AXI và nhấn OK để tự động kết nối xung nhịp (thao tác này sẽ tự động thêm khối Processor System Reset và AXI Interconnect).
+Tiếp tục chọn Run Connection Automation, chọn mục /axi_gpio_0/GPIO. Tại hộp thoại hiện ra, ở mục Select Board Part Interface, hãy chọn btns_5bits (để cấu hình cho nút nhấn) và nhấn OK.
+Làm tương tự cho khối GPIO thứ hai: Chạy tự động kết nối cho /axi_gpio_1/S_AXI và cấu hình /axi_gpio_1/GPIO kết nối với leds_8bits (để điều khiển đèn LED).
+Hình 8: Thêm và kết nối các thiết bị ngoại vi
+4. Cấu hình hệ thống ngắt (Interrupts)
+Nhấp đúp chuột vào khối GPIO điều khiển nút nhấn (axi_gpio_0) để mở hộp thoại Re-customize IP. Chuyển sang thẻ IP Configuration, tích chọn vào ô Enable Interrupt để bật tính năng ngắt và nhấn OK (khối GPIO sẽ xuất hiện thêm một cổng ngắt ip2intc_irpt).
+Hình 9: Cấu hình ngắt cho khối điều khiển nút nhấn
+Nhấp đúp chuột vào khối Zynq PS (processing_system7_0) để mở cấu hình. Chọn mục Interrupts từ danh sách bên trái. Tích chọn ô Fabric Interrupts, sau đó mở rộng và tích chọn cổng ngắt dùng chung IRQ_F2P[15:0] rồi nhấn OK.
+Hình 10: Cấu hình ngắt cho khối Zynq PS
+Sử dụng chuột kéo để nối trực tiếp cổng báo ngắt của khối GPIO (ip2intc_irpt) với cổng nhận ngắt vừa được tạo trên khối Zynq PS (IRQ_F2P[0:0]).
+Hình 11: Hệ thống ngắt sau khi kết nối cổng báo ngắt của khối GPIO với cổng nhận ngắt trên khối Zynq PS
+Phân tích thiết kế và nguyên lý hoạt động:
+Các thành phần chính trong hệ thống:
+ZYNQ7 Processing System (processing_system7_0): Đây là trung tâm của hệ thống, chứa lõi vi xử lý ARM.
+Nó đóng vai trò là Master điều khiển toàn bộ bus dữ liệu thông qua cổng xuất M_AXI_GP0.
+Nó cung cấp nguồn xung nhịp chính (FCLK_CLK0) cho toàn bộ phần cứng (PL) trong thiết kế.
+Nó có một cổng nhận ngắt phần cứng từ bên ngoài vào là IRQ_F2P[0:0].
+AXI Interconnect (ps7_0_axi_periph): Đóng vai trò là trung chuyển hay bộ định tuyến cho giao thức AXI. Nó nhận các lệnh từ cổng Master của Zynq PS và phân phối chúng đến đúng địa chỉ của 2 khối Slave (là 2 khối GPIO).
+Khối AXI GPIO 0 (axi_gpio_0): Khối ngoại vi này được kết nối với các nút nhấn thông qua cổng btns_5bits. Nó có một đường tín hiệu ngắt xuất ra tên là ip2intc_irpt.
+Khối AXI GPIO 1 (axi_gpio_1): Khối ngoại vi này được kết nối với hệ thống đèn LED thông qua cổng leds_8bits. Nó chỉ nhận dữ liệu để xuất ra LED nên không có chân tín hiệu ngắt.
+Processor System Reset (rst_ps7_0_100M): Khối này nhận tín hiệu xung nhịp và tín hiệu reset từ Zynq PS, từ đó tạo ra các tín hiệu reset đồng bộ (interconnect_aresetn, peripheral_aresetn) để khởi động lại (reset) bộ AXI Interconnect và các khối GPIO một cách an toàn.
+Phân tích Luồng hoạt động của hệ thống
+Luồng điều khiển và dữ liệu (Data Flow): Khi bộ xử lý Zynq (PS) muốn đọc trạng thái nút nhấn hoặc bật/tắt đèn LED, nó sẽ gửi tín hiệu địa chỉ và dữ liệu qua cổng M_AXI_GP0. Tín hiệu này đi vào AXI Interconnect. Dựa vào địa chỉ nhớ, Interconnect sẽ quyết định mở đường truyền tới axi_gpio_0 (để đọc nút nhấn) hoặc axi_gpio_1 (để điều khiển đèn LED).
+Luồng xử lý Ngắt (Interrupt Flow - Điểm cốt lõi của Bài 2B): Hãy nhìn vào đường nối trực tiếp
+từ cổng ip2intc_irpt của khối axi_gpio_0 vòng lại cổng IRQ_F2P[0:0] của khối Zynq PS.
+Hệ thống này sử dụng cơ chế Ngắt (Interrupt).
+Khi người dùng nhấn một nút trên mạch (btns_5bits), khối axi_gpio_0 sẽ ngay lập tức phát ra một xung tín hiệu trên đường dây ip2intc_irpt.
+Tín hiệu này chạy thẳng vào cổng nhận ngắt IRQ_F2P[0:0] của vi xử lý Zynq. Vi xử lý sẽ lập tức dừng việc đang làm lại để chạy chương trình phục vụ ngắt (tăng bộ đếm và xuất ra đèn LED qua axi_gpio_1), giúp hệ thống phản hồi tức thời.
+5. Kiểm tra và xuất thiết kế (Generate Bitstream & Export)
+Lưu lại thiết kế bằng cách chọn File > Save Block Design.
+Chạy công cụ kiểm tra lỗi bằng cách chọn Tools > Validate Design (hoặc nhấn biểu tượng Validate). Nhấn OK khi nhận được thông báo xác thực thành công.
+Chuyển sang thẻ Sources (ở cửa sổ Data Windows), nhấp chuột phải vào file thiết kế gốc (zynq_interrupt_system) và chọn Create HDL Wrapper. Chọn để Vivado tự quản lý wrapper và nhấn OK.
+Trong Flow Navigator, nhấp vào Generate Bitstream. (Nếu được hỏi, hãy nhấn Save để lưu dự án). Đợi quá trình tổng hợp và chạy bitstream hoàn tất.
+Khi hộp thoại Bitstream Generation Completed hiện ra, chọn Open Implemented Design và nhấn OK.
+Hình 12: Báo cáo timing sau khi Run Implementation
+Nhận xét báo cáo timing:
+Hệ thống thông báo "All user specified timing constraints are met". Điều này có nghĩa là mạch FPGA được tổng hợp sẽ hoạt động hoàn toàn tốt ở tần số xung nhịp đã được thiết lập mà không gặp lỗi truyền dữ liệu.
+Setup Timing (Thời gian thiết lập): Chỉ số WNS (Worst Negative Slack) đạt giá trị dương là 2.671 ns và toàn bộ 1877 endpoint đều an toàn (0 failing endpoints). Điều này đảm bảo tín hiệu dữ liệu truyền giữa các flip-flop đến đích đủ sớm trước khi sườn xung nhịp tiếp theo xuất hiện, giúp mạch chốt đúng mức logic.
+Hold Timing (Thời gian lưu giữ): Chỉ số WHS (Worst Hold Slack) mang giá trị dương là 0.035 ns với 0 điểm vi phạm. Dữ liệu được duy trì trạng thái ổn định trong một khoảng thời gian đủ dài sau sườn xung nhịp để phần cứng nhận diện chính xác, ngăn ngừa hiện tượng sai lệch dữ liệu do độ trễ lan truyền của các cổng logic.
+Pulse Width (Độ rộng xung): Chỉ số WPWS (Worst Pulse Width Slack) đạt mức dương 4.020 ns trên tổng số 943 endpoint, cho thấy xung nhịp phân phối trong hệ thống giữ được dạng sóng chuẩn, không bị mất đồng bộ phần cứng.
+Hình 12: Báo cáo power sau khi Run Implementation
+Nhận xét báo cáo power:
+Tổng công suất (Total On-Chip Power): Chip Zynq tiêu thụ tổng cộng 1.677 W, được chia thành công suất động (Dynamic) chiếm 92% (1.535 W) và công suất tĩnh (Device Static) chiếm 8% (0.141 W).
+Phân bổ công suất động (Dynamic Power Breakdown): Khối xử lý PS7 tiêu thụ tới 1.529 W, tương đương 99% tổng công suất động của toàn hệ thống. Các tài nguyên logic lập trình được (PL) tiêu thụ điện năng không đáng kể. Điều này hoàn toàn hợp lý, khi phần cứng PL chỉ đóng vai trò chứa các khối ngoại vi cơ bản (AXI GPIO, Interconnect) để sinh ngắt, trong khi lõi xử lý trung tâm phải hoạt động liên tục.
+Biên độ nhiệt: Nhiệt độ tiếp giáp (Junction Temperature) của chip ước tính đạt 44.3°C khi hoạt động trong điều kiện môi trường lý tưởng (Ambient Temperature) là 25.0°C. Hệ thống có biên độ nhiệt dự phòng (Thermal Margin) rất rộng lên tới 40.7°C (tương đương 3.4 W).
+Cuối cùng, chọn File > Export > Export Hardware for.... Đảm bảo rằng tùy chọn Include bitstream đều được đánh dấu, sau đó nhấn OK để hoàn tất và chuyển sang môi trường phát triển phần mềm Vitis.
+Exercise 2C: Tạo ứng dụng phần mềm trong Vitis
+Bước 1: Khởi tạo Platform Project trong Vitis Trên Vitis 2023.1, phải tạo một Platform trước khi tạo ứng dụng.
+Khi Vitis mở lên, chọn thư mục Workspace.
+Chọn File > New > Platform Project.
+Đặt tên cho nền tảng (ví dụ: zedboard_platform) và nhấn Next.
+Chọn Create from hardware specification (XSA), sau đó duyệt (Browse) đến tệp .xsa bạn vừa xuất từ Vivado.
+Đảm bảo hệ điều hành (OS) là standalone và bộ xử lý là ps7_cortexa9_0. Nhấn Finish.
+Trong cửa sổ Explorer, nhấp chuột phải vào Platform Project vừa tạo và chọn Build Project để tạo Board Support Package (BSP).
+Hình 13: Tạo dự án Vitis interrupts platform
+Bước 2: Tạo Application Project
+Chọn File > New > Application Project. Nhấn Next ở màn hình chào mừng (nếu có).
+Tại cửa sổ Platform, chọn nền tảng platform vừa tạo ở Bước 2. Nhấn Next.
+Đặt tên dự án ứng dụng là interrupt_counter và nhấn Next.
+Giữ nguyên cấu hình mặc định cho Domain (standalone) và nhấn Next.
+Tại cửa sổ Templates, chọn Empty Application (C) và nhấn Finish.
+Hình 14: Tạo Application Project
+Bước 3: Nhập mã nguồn C vào dự án
+Trong Project Explorer, mở rộng dự án interrupt_counter, nhấp chuột phải vào thư mục src và chọn Import....
+Chọn General > File System và nhấn Next.
+Duyệt đến thư mục chứa mã nguồn
+Tích chọn tệp interrupt_counter_tut_2B.c và nhấn Finish để nhập vào dự án.
+Hình 15: Import Code vào dự án Application
+Mở tệp vừa nhập để xem mã nguồn. Mã nguồn này đã cấu hình hàm BTN_Intr_Handler để mỗi khi nhận tín hiệu ngắt từ nút nhấn, bộ đếm sẽ tăng lên và giá trị được xuất ra đèn LED dưới dạng nhị phân.
+Hình 16: Code interrupt_counter_tut_2B
+Nhấp chuột phải vào dự án interrupt_counter và chọn Build Project để biên dịch mã nguồn.
+Bước 4: Nạp chương trình xuống FPGA (Program FPGA)
+Đảm bảo ZedBoard đã được cấp nguồn và cáp JTAG/UART đã cắm vào máy tính.
+Trên thanh menu của Vitis, chọn Xilinx > Program Device (hoặc biểu tượng Program FPGA trên thanh công cụ).
+Hộp thoại hiện ra sẽ tự động điền sẵn đường dẫn tới tệp bitstream. Nhấn Program. Đèn DONE màu xanh dương trên ZedBoard sẽ sáng lên khi nạp thành công.
+Vì không có board để kết nối nên thông báo lỗi sẽ xuất hiện.
+Hình 17: Thông báo lỗi không có kết nối đến Board
+Bước 5: Chạy ứng dụng trên Zynq PS
+Nhấp chuột phải vào dự án ứng dụng interrupt_counter trong Project Explorer.
+Chọn Run As > 1 Launch Hardware (Single Application Debug).
+Thử nhấn các nút bấm (BTNU, BTND, BTNL, BTNR, BTNC) trên ZedBoard và quan sát dải đèn LED từ LED0 (LSB) đến LED7 (MSB) đếm nhị phân theo các giá trị khác nhau.
+Vì không có board thực tế nên sẽ xuất hiện thông báo lỗi không tìm thấy board
+Hình 18: Thông báo lỗi không có kết nối đến board
+Exercise 2D: Thêm một nguồn ngắt thứ hai
+1. Mở lại dự án và thêm bộ định thời (AXI Timer)
+Mở phần mềm Vivado và mở lại dự án zynq_interrupts.xpr đã tạo ở phần trước. Trong bảng Sources, nhấp đúp chuột vào tệp block design (ví dụ: zynq_interrupt_system.bd) để mở sơ đồ hệ thống.
+Nhấp chuột phải vào không gian trống trên sơ đồ, chọn Add IP, gõ từ khóa timer và thêm khối AXI Timer vào thiết kế.
+Nhấn vào tùy chọn Run Connection Automation ở phía trên cùng, chọn /axi_timer_0/S_AXI và nhấn OK để tự động kết nối khối Timer với AXI Interconnect.
+Hình 19: Sơ đồ hệ thống sau khi thêm khối AXI Timer
+2. Gộp các tín hiệu ngắt bằng khối Concat
+Do đầu vào ngắt của Zynq PS là một cổng dùng chung và đã được nối với GPIO, cần một khối trung gian để gộp nhiều tín hiệu ngắt thành một. Nhấp chuột phải, chọn Add IP, gõ concat và thêm khối Concat vào thiết kế.
+Chọn đường dây kết nối cũ đang cắm vào cổng IRQ_F2P[0:0] của Zynq PS và nhấn phím DELETE trên bàn phím để xóa.
+Kết nối đầu ra dout[1:0] của khối Concat vào cổng ngắt IRQ_F2P[0:0] của Zynq PS.
+Kéo dây kết nối cổng xuất tín hiệu ngắt của khối GPIO vào ngõ vào In0[0:0] của khối Concat, và cổng tín hiệu ngắt của Timer vào ngõ vào In1[0:0] của khối Concat.
+Hình 20: Sơ đồ hệ thống sau khi thêm khối Concat
+Phân tích thiết kế:
+Bổ sung Bộ định thời (AXI Timer): Thiết kế đã tích hợp thêm khối axi_timer_0 kết nối với hệ thống thông qua AXI Interconnect. Khối Timer này cung cấp thêm một đường tín hiệu interrupt mới, đóng vai trò là nguồn kích hoạt ngắt độc lập thứ hai bên cạnh cụm nút bấm.
+Gộp tín hiệu ngắt (Khối Concat): Vì lõi Zynq PS (processing_system7_0) sử dụng một cổng chung (IRQ_F2P) để nhận ngắt từ phần cứng lập trình được (PL), thiết kế phải sử dụng thêm khối xlconcat_0. Khối này có nhiệm vụ thu thập tín hiệu ngắt từ Timer và từ khối điều khiển nút nhấn (axi_gpio_0), ghép chúng lại thành một bus dữ liệu duy nhất tại ngõ ra dout để đưa thẳng vào vi xử lý.
+Mở rộng băng thông định tuyến: Khối giao tiếp trung gian AXI Interconnect (ps7_0_axi_periph) đã được cấp thêm một bộ cổng kết nối (Master) để tạo đường truyền cấu hình từ Zynq PS đến khối Timer mới.
+Luồng hoạt động đa ngắt: Khác với thiết kế trước, hệ thống này có thể phản ứng với hai sự kiện phần cứng song song. Bất kể là người dùng tác động vật lý lên nút bấm hay Timer chạy hết khoảng thời gian đã định, một xung ngắt sẽ được gửi qua khối Concat về Zynq PS. Bộ điều khiển ngắt (Interrupt Controller) nằm trong vi xử lý sẽ đọc bus tín hiệu này để phân loại độ ưu tiên và gọi đúng
+hàm phần mềm phục vụ sự kiện đó.
+Phân tích nguyên lý hoạt động của hệ thống:
+1. Khởi tạo hệ thống (Initialization)
+Khi hệ thống khởi động, mã nguồn C (phần mềm) chạy trên vi xử lý ARM lõi kép bên trong khối Zynq PS sẽ tiến hành khởi tạo các thiết bị ngoại vi.
+Thông qua hệ thống bus AXI và bộ định tuyến AXI Interconnect, Zynq PS sẽ thiết lập cấu hình ban đầu cho khối Timer (đặt thời gian đếm) và các khối GPIO (cấu hình cổng vào cho nút nhấn, cổng ra cho LED).
+Đồng thời, phần mềm kích hoạt Bộ điều khiển ngắt (Interrupt Controller) bên trong PS, gán các hàm phục vụ ngắt (Interrupt Handler) tương ứng cho tín hiệu ngắt của Timer và tín hiệu ngắt của Nút nhấn.
+2. Giao tiếp dữ liệu qua bus AXI (Data Flow)
+Zynq PS đóng vai trò là "Master" (Người chủ), còn Timer và các khối GPIO đóng vai trò là "Slave" (Người tớ).
+Bất cứ khi nào phần mềm muốn bật/tắt đèn LED, Zynq PS sẽ gửi một lệnh ghi (Write) chứa dữ liệu và địa chỉ của khối axi_gpio_1 vào AXI Interconnect. AXI Interconnect sẽ định tuyến gói dữ liệu này đến đúng khối điều khiển LED để thay đổi trạng thái đèn.
+Cơ chế hoạt động của ngắt kép (Dual Interrupt Mechanism)
+Hệ thống này  dùng cơ chế "ngắt" (vi xử lý được rảnh rỗi làm việc khác cho đến khi ngoại vi chủ động báo cáo). Vì có 2 nguồn ngắt, khối Concat (xlconcat_0) được dùng để gộp 2 tín hiệu vật lý này thành một bus dữ liệu truyền vào Zynq PS.
+Luồng hoạt động của ngắt Nút nhấn (Asynchronous Event):
+Khi người dùng nhấn một nút, khối axi_gpio_0 nhận diện sự thay đổi điện áp và lập tức phát ra một xung tín hiệu ngắt.
+Tín hiệu đi qua khối Concat báo về vi xử lý PS.
+Vi xử lý tạm dừng công việc hiện tại, chuyển sang chạy hàm BTN_Intr_Handler để phân tích xem nút nào vừa được bấm, tính toán giá trị mới của bộ đếm, gửi lệnh qua bus AXI để cập nhật đèn LED, sau đó quay lại trạng thái chờ.
+Luồng hoạt động của ngắt Timer (Periodic Event):
+Khối axi_timer_0 hoạt động hoàn toàn độc lập ở phần cứng (PL) dựa trên xung nhịp hệ thống.
+Khi đếm hết chu kỳ đã được cài đặt, Timer phát ra tín hiệu ngắt, truyền qua khối Concat về vi xử lý.
+Vi xử lý kích hoạt hàm TMR_Intr_Handler. Hàm này được lập trình để ghi nhận số lần Timer hết hạn; cứ sau 3 lần ngắt Timer, hệ thống sẽ tự động cộng thêm 1 vào bộ đếm và xuất lệnh qua AXI để cập nhật đèn LED.
+3. Tạo lại Bitstream và xuất phần cứng
+Nhấp chuột phải vào tệp thiết kế gốc (top-level design) và chọn Create HDL Wrapper..., giữ nguyên tùy chọn mặc định và nhấn OK.
+Chọn Generate Bitstream trong Flow Navigator. Nhấn Save nếu phần mềm yêu cầu lưu thiết kế, sau đó nhấn Yes để đồng ý chạy các bước Synthesis và Implementation.
+Hình 21: Báo cáo timing sau khi thêm các khối mới
+Nhận xét báo cáo timing:
+Báo cáo ghi nhận "All user specified timing constraints are met", chứng tỏ mạch số trên FPGA sẽ hoạt động chuẩn xác ở tần số xung nhịp đã thiết lập mà không gặp tình trạng vi phạm định thời.
+Setup Timing (Thời gian thiết lập): Chỉ số WNS (Worst Negative Slack) đạt giá trị dương là 1.319 ns và toàn bộ 2550 endpoint đều không có điểm vi phạm (0 failing endpoints). Mặc dù độ trễ đã tăng (WNS giảm so với bài 2B) do hệ thống phải định tuyến qua khối Timer và Concat mới, biên độ thời gian vẫn hoàn toàn dương, đảm bảo dữ liệu truyền đến đích ổn định trước sườn xung nhịp tiếp theo.
+Hold Timing (Thời gian lưu giữ): Chỉ số WHS (Worst Hold Slack) duy trì ở mức dương 0.067 ns với 0 điểm vi phạm trên tổng số 2550 endpoint. Dữ liệu được giữ ổn định đủ lâu sau sườn xung nhịp để các flip-flop có thể chốt chính xác trạng thái logic.
+Pulse Width (Độ rộng xung): Chỉ số WPWS (Worst Pulse Width Slack) đạt 4.020 ns với 0 điểm vi phạm trên 1185 endpoint, cho thấy tín hiệu xung nhịp phân phối trong chip giữ được dạng sóng chuẩn, không bị méo hay suy hao.
+Hình 22: Báo cáo power sau khi thêm các khối mới
+Nhận xét báo cáo power:
+Phân bổ công suất động (Dynamic Power): Công suất động đạt 1.540 W (chiếm 92% tổng công suất), trong đó hệ thống vi xử lý PS7 vẫn là thành phần tiêu tốn nhiều năng lượng nhất với 1.529 W (tương đương 99% lượng công suất động). Lõi ARM Cortex-A9 luôn tiêu thụ mức điện năng cố định này khi được kích hoạt.
+Điện năng của Programmable Logic (PL): Các tài nguyên PL tiêu thụ năng lượng cực kỳ thấp nhưng đã có sự nhích nhẹ so với bài 2B. Cụ thể, hệ thống phân phối xung nhịp (Clocks) tiêu thụ 0.005 W, định tuyến tín hiệu (Signals) tiêu thụ 0.003 W và các cổng logic (Logic) tốn 0.001 W. Sự thay đổi nhỏ này là kết quả trực tiếp của việc thêm khối AXI Timer, khối Concat và mở rộng các kết nối AXI Interconnect.
+Đánh giá về nhiệt độ: Nhiệt độ tiếp giáp (Junction Temperature) ước tính của chip đạt 44.4°C trong điều kiện nhiệt độ môi trường 25.0°C. Mức nhiệt này hoàn toàn ổn định và hệ thống sở hữu biên độ nhiệt (Thermal Margin) rất an toàn lên đến 40.6°C (tương đương với mức công suất dự phòng 3.4 W) trước khi chạm ngưỡng rủi ro.
+Khi hoàn tất, chọn File > Export > Export Hardware for... từ menu.
+Đảm bảo đã chọn Include bitstream, nhấn OK. Nếu có thông báo hỏi bạn có muốn ghi đè lên file đã xuất trước đó hay không, hãy chọn Yes.
+Cập nhật và chạy ứng dụng phần mềm trong Vitis
+Bước 1: Cập nhật nền tảng phần cứng (Platform Project)
+Trong cửa sổ Project Explorer của Vitis, nhấp chuột phải vào Platform Project (ví dụ: zedboard_platform) và chọn Update Hardware Specification.
+Trỏ đường dẫn đến tệp .xsa mới nhất mà bạn vừa xuất (Export) từ Vivado, sau đó nhấn OK.
+Nhấp chuột phải vào Platform Project một lần nữa và chọn Build Project.  Vitis biên dịch lại gói BSP (Board Support Package), qua đó tự động tích hợp thêm các thư viện điều khiển (driver) cho khối AXI Timer vừa được thêm vào.
+Hình 23: Cập nhật lại nền tảng phần cứng
+Bước 2: Thay thế tệp mã nguồn trong Application Project
+Mở rộng dự án ứng dụng interrupt_counter, tìm đến thư mục src.
+Nhấp chuột phải vào tệp mã nguồn cũ (interrupt_counter_tut_2B.c) và chọn Delete để xóa đi.
+Nhấp chuột phải vào thư mục src, chọn Import...
+Chọn General > File System và nhấn Next.
+Tích chọn tệp interrupt_counter_tut_2D.c và nhấn Finish để nhập vào dự án.
+Hình 24: Import Code interrupt_counter_tut_2D.c
+Mở tệp vừa nhập để xem, bạn sẽ thấy tệp này bổ sung thêm hàm TMR_Intr_Handler dùng để đếm số lần Timer hết hạn, và sau 3 lần sẽ cập nhật tăng giá trị hiển thị trên LED.
+Nhấp chuột phải vào dự án ứng dụng interrupt_counter và chọn Build Project để biên dịch lại chương trình với mã nguồn mới.
+Bước 3: Nạp FPGA và chạy thử nghiệm
+Đảm bảo ZedBoard đã được cấp nguồn và kết nối cáp đầy đủ.
+Trên thanh menu của Vitis, chọn Xilinx > Program Device. Vitis sẽ tự động trỏ đến tệp bitstream mới nhất (đã bao gồm khối Timer và Concat). Nhấn Program để nạp cấu hình xuống FPGA.
+Nhấp chuột phải vào dự án ứng dụng interrupt_counter, chọn Run As > 1 Launch Hardware (Single Application Debug) để chạy chương trình.
+Vì không có board thực tế nên thông báo lỗi không tìm thấy board sẽ xuất hiện.
+Hình 25: Thông báo lỗi không tìm thấy board
+Hình nhóm:
+
+--- TABLE ---
+ | DEPARTMENT OF COMPUTER ENGINEERING (DCE) SOC DESIGN MMH: SOCD334264
+Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277 | Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277

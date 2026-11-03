@@ -1,0 +1,106 @@
+Giới thiệu bài Lab
+Bài Lab hướng dẫn thiết kế phần cứng bằng High Level Synthesis sử dụng Vivado HLS. Sinh viên sẽ thực hiện mô phỏng, tổng hợp và tối ưu hóa thiết kế từ mã nguồn C/C++ sang RTL hardware trên FPGA.
+Mục tiêu bài Lab
++ Hiểu nguyên lý High Level Synthesis
++ Làm quen Vivado HLS
++ Thực hiện C Simulation và C Synthesis
++ Tối ưu thiết kế bằng HLS Directives
++ Phân tích latency và hardware resources
++ Hiểu pipeline, unroll và array reshape
++ Phân tích interface synthesis trong FPGA
+Công cụ cần thiết
+Phần cứng
+ZedBoard hoặc PynQ-Z2
+Phần mềm
++ Vivado HLS 2019.2
++ Vivado Design Suite 2019.2
++ Tcl Command Prompt
+Kết quả đạt được
++ Tạo project HLS bằng GUI và Tcl Script
++ Tổng hợp thiết kế từ C/C++ sang RTL
++ Chạy C Simulation và C/RTL Cosimulation
++ Tối ưu hiệu năng bằng HLS Directives
++ Phân tích latency và resource utilization
++ Hiểu nguyên lý interface synthesis trong FPGA HLS design
+Phần công việc thực hiện
+Thực hành
+Exercise 3A: Tạo dự án (Creating Projects in Vitis HLS)
+Khởi chạy Vitis HLS 2023.1 (thay vì Vivado HLS) từ menu Start hoặc shortcut trên máy tính.
+Tại màn hình Welcome, chọn Create New Project.
+Nhập matrix_mult_prj vào ô Project name, chọn đường dẫn lưu trữ và nhấn Next.
+Tại bước Design Files, nhấn Add Files... để thêm 2 tệp matrix_mult.cpp và matrix_mult.h. Chỉ định mục Top Function là matrix_mult và nhấn Next.
+Tại bước Testbench Files, nhấn Add Files... để thêm tệp matrix_mult_test.cpp và nhấn Next.
+Ở bước Solution Configuration, nhấn nút ... trong phần Part Selection. Chuyển sang thẻ Boards và chọn ZedBoard Zynq Evaluation and Development Kit.
+Nhấn Finish để hoàn tất. Giao diện Vitis HLS sẽ mở ra với cấu trúc Explorer ở bên trái.
+Exercise 3B: Tối ưu hóa thiết kế (Design Optimisation in Vitis HLS)
+Bước 1: Chạy mô phỏng và tổng hợp thiết kế cơ bản (Solution 1)
+(a) Mô phỏng C (C Simulation): Nhấn nút Run C Simulation trên thanh công cụ, để nguyên tùy chọn mặc định và nhấn OK. Khi chạy xong, màn hình Console (bên dưới) sẽ hiển thị "Test passed!" nếu thành công.
+(b) Tổng hợp C (C Synthesis): Nhấn nút C Synthesis để chuyển đổi mã C++ sang mô hình RTL (VHDL/Verilog/SystemC). Sau khi hoàn tất, báo cáo Synthesis Report sẽ tự động mở, hiển thị các thông số kết quả dưới đây
+- Công cụ Vitis HLS đã tối ưu thành công đường dẫn dữ liệu với thời gian trễ ước tính đạt 3.430 ns, đáp ứng tốt yêu cầu timing với biên độ dự phòng là 1.35 ns.
+- Ước tính hiệu suất có tổng độ trễ là 86 chu kỳ tương đương 430.000 ns và khoảng thời gian lặp (Interval) là 87 chu kỳ. Quá trình tổng hợp hàm này cũng ghi nhận cảnh báo vi phạm II.
+- Vòng lặp này đã được tạo pipeline với tổng số lần lặp là 25. Độ trễ cho mỗi vòng lặp là 13 chu kỳ, dẫn đến tổng độ trễ của riêng khối này là 84 chu kỳ, gặp lỗi vi phạm II do giới hạn tài nguyên, khiến khoảng thời gian khởi tạo thực tế bị đẩy lên 3 thay vì đạt mức lý tưởng.
+Ước tính tài nguyên tiêu thụ 5 khối xử lý tín hiệu số (DSP), 310 thanh ghi (FF) và 482 bảng tra cứu (LUT). hiết kế hoàn toàn không sử dụng tài nguyên bộ nhớ khối bên trong chip (BRAM: 0 và URAM: 0).
+(c) Đồng mô phỏng (C/RTL Cosimulation): Nhấn nút Run C/RTL Cosimulation, chọn ngôn ngữ RTL là Verilog và nhấn OK. Chờ quá trình hoàn tất, báo cáo sẽ hiện ra thông báo "Pass" ở cột Status
+Bước 2: Tối ưu hóa bằng đường ống vòng lặp
+(a) Tạo cấu hình thiết kế mới bằng cách nhấn nút New Solution và chọn Finish để giữ mặc định cho solution2.
+(b) Mở tệp matrix_mult.cpp. Ở tab Directive (bên phải), nhấp chuột phải vào vòng lặp Product, chọn Insert Directive. Trong menu xổ xuống, chọn loại chỉ thị là PIPELINE và nhấn OK. Việc này giúp loại bỏ độ trễ chuyển tiếp vòng lặp.
+(c) Nhấn C Synthesis để tổng hợp. Console sẽ báo rằng vòng lặp Row đã được làm phẳng (flattened), nhưng khoảng thời gian khởi tạo (Initiation Interval - II) mục tiêu là 1 không đạt được ở vòng lặp Product do sự phụ thuộc vòng lặp (loop dependency), và II thực tế đạt được là 2.
+Ước tính thời gian: thời gian trễ ước tính đạt 3.610 ns, đáp ứng an toàn giới hạn timing với độ dự phòng (Uncertainty) là 1.35 ns.
+Ước tính hiệu suất (Performance Estimates): Tổng độ trễ (Latency) của toàn khối là 258 chu kỳ (tương đương 1.290E3 ns) và khoảng thời gian lặp (Interval) là 259 chu kỳ. Hệ thống ghi nhận có lỗi vi phạm II (II Violation) tại cấp độ này. Vòng lặp có tổng số lần lặp là 125. Độ trễ của một lần lặp) là 9 chu kỳ, đưa tổng độ trễ của riêng khối vòng lặp này lên 256 chu kỳ (1.280E3 ns).
+Vòng lặp Row_Col_Product ghi nhận lỗi vi phạm II do sự phụ thuộc bộ nhớ với khoảng cách
+Thiết kế ở solution2 sử dụng 1 khối tính toán DSP, 367 thanh ghi (FF) và 512 bảng tra cứu (LUT).
+Bước 3: Gỡ rối tài nguyên bộ nhớ (Solution 3)
+(a) Quay lại chế độ Synthesis và tạo solution mới (solution3). Tại tab Directive, chuột phải vào vòng lặp Col chọn Insert Directive, chọn PIPELINE và nhấn OK (với II=1 mặc định). Nhấn C Synthesis.
+Đường dẫn dữ liệu được tối ưu tốt với thời gian trễ ước tính (Estimated) là 3.430 ns, đáp ứng được yêu cầu timing với biên độ dự phòng (Uncertainty) là 1.35 ns.
+Tổng độ trễ (Latency) của khối này là 86 chu kỳ (tương đương 430.000 ns) và khoảng thời gian lặp (Interval) là 87 chu kỳ. Hệ thống có cảnh báo vi phạm II (II Violation) ở mức này. Thực hiện tổng cộng 25 lần lặp (Trip Count: 25). Độ trễ của một lần lặp (Iteration Latency) là 13 chu kỳ, dẫn đến tổng độ trễ của riêng khối vòng lặp là 84 chu kỳ (420.000 ns).
+Vòng lặp Row_Col gặp lỗi vi phạm II do giới hạn tài nguyên. Chính vì giới hạn tài nguyên đọc/ghi bộ nhớ này, khoảng thời gian khởi tạo (Interval) thực tế bị đẩy lên mức 3 thay vì đạt được mức lý tưởng là 1.
+Trong solution3, thiết kế sử dụng 5 khối xử lý tín hiệu số (DSP), 310 thanh ghi (FF) và 482 bảng tra cứu logic (LUT).
+Bước 4: Chia nhỏ cấu trúc mảng bộ nhớ (Solution 4)
+(a) Quay về chế độ Synthesis và tạo solution4 (mặc định). Để chia nhỏ mảng theo chiều lấy dữ liệu của biến k, chuột phải vào biến a ở tab Directive, chọn Insert Directive. Đặt Directive là ARRAY_RESHAPE và đặt mục dimension (chiều) thành 2.
+(b) Lặp lại thao tác cho biến b, đặt Directive là ARRAY_RESHAPE nhưng với dimension là 1.
+(c) Nhấn C Synthesis. Báo cáo tổng hợp lúc này cho thấy mục tiêu II=1 đã đạt được.
+Hình 14: Báo cáo tổng hợp cho bộ nhân ma trận, solution 4
+Thời gian trễ ước tính (Estimated) đạt 3.560 ns, hoàn toàn đáp ứng được yêu cầu về thời gian với biên độ dự phòng (Uncertainty) là 1.35 ns.
+Nhờ các kỹ thuật tối ưu hóa (như Reshape mảng), tổng độ trễ (Latency) đã giảm mạnh xuống chỉ còn 30 chu kỳ (tương đương 150.000 ns). Khoảng thời gian lặp (Interval) của toàn khối đạt 31 chu kỳ.
+Vitis HLS đã cấu trúc lại vòng lặp thành một module riêng mang tên matrix_mult_Pipeline_Row..., khối này có độ trễ là 26 chu kỳ (130.000 ns) và Interval là 26. Hệ thống cảnh báo lỗi vi phạm II (II Violation) tại khối matrix_mult_Pipeline_Row.... Theo thông báo trong tab Guidance bên dưới, nguyên nhân vi phạm là do công cụ không thể lập lịch cho thao tác ghi ('store' operation).
+Thời gian xử lý (giảm Latency từ 86 xuống 30 chu kỳ) phải  gia tăng đáng kể lượng tài nguyên phần cứng. Toàn bộ thiết kế ở solution4 tiêu thụ tới 25 khối xử lý tín hiệu số (DSP), 1026 thanh ghi (FF) và 502 bảng tra cứu logic (LUT).
+Bước 5: Tạo đường ống cấp hàm và so sánh (Solution 5)
+(a) Tạo giải pháp mới là solution5. Giải pháp này nhằm thử nghiệm áp dụng PIPELINE cho toàn bộ hàm thay vì vòng lặp nhỏ. Tại tab Directive, nhấp chuột phải vào chỉ thị PIPELINE của vòng lặp Col vừa tạo và chọn Remove Directive để xóa đi. Sau đó, nhấp chuột phải vào hàm cấp cao nhất matrix_mult, chọn Insert Directive -> PIPELINE rồi nhấn OK.
+(b) Nhấn C Synthesis để tổng hợp.
+Thời gian trễ ước tính (Estimated) rất ấn tượng, chỉ đạt 3.372 ns, hoàn toàn đáp ứng yêu cầu về thời gian với biên độ dự phòng (Uncertainty) là 1.35 ns.
+Khác với các giải pháp trước, khối cấp cao nhất ở giải pháp này đã được áp dụng trực tiếp kỹ thuật đường ống. Việc này giúp tổng độ trễ (Latency) đạt mức thấp nhất, chỉ tốn 27 chu kỳ (tương đương 135.000 ns) để hoàn thành.  Khoảng thời gian khởi tạo để bắt đầu nhận dữ liệu mới (Interval) cũng đạt mức tối ưu là 13 chu kỳ.
+Việc áp dụng đường ống (pipeline) cho toàn bộ hàm đã khiến công cụ HLS gỡ cuộn toàn bộ các vòng lặp bên trong, dẫn đến sự bùng nổ về mặt tiêu thụ tài nguyên phần cứng. Cụ thể, giải pháp này tiêu thụ khối lượng tài nguyên khổng lồ bao gồm 125 khối xử lý tín hiệu số (DSP), 3304 thanh ghi (FF) và 1207 bảng tra cứu logic (LUT).
+(c) Sử dụng công cụ so sánh bằng cách nhấp biểu tượng Compare Reports trên thanh công cụ (hoặc menu Project > Compare Reports), đưa solution4 và solution5 sang cột bên phải để so sánh. Báo cáo so sánh sẽ chỉ ra: thiết kế tạo đường ống ở hàm (solution5) hoàn thành nhanh hơn chỉ tốn 13 chu kỳ, so với 36 chu kỳ khi tạo đường ống ở vòng lặp (solution4). Tuy nhiên, chi phí phải đánh đổi là việc sử dụng nhiều tài nguyên phần cứng (FF, LUT, DSP) hơn rất nhiều do mọi vòng lặp trong thiết kế đều bị gỡ cuộn.
+Solution 5 đạt được thời gian trễ đường dẫn dữ liệu (Estimated) ngắn hơn ở mức 3.372 ns, so với 3.560 ns của solution 4.
+Solution 5 hoàn thành toàn bộ khối lượng công việc nhanh hơn, chỉ mất 27 chu kỳ (tương đương 0.135 us), trong khi solution 4 cần 30 chu kỳ (tương đương 0.150 us). Sự chênh lệch rõ rệt nhất nằm ở thông lượng của hệ thống. solution 5 chỉ mất 13 chu kỳ để sẵn sàng nhận dữ liệu cho lần tính toán tiếp theo, trong khi solution 4 tốn tới 31 chu kỳ.
+Sự vượt trội về mặt tốc độ của solution 5 đòi hỏi gia tăng về mặt diện tích và tài nguyên phần cứng.
+Khối DSP: solution 5 sử dụng tới 125 khối DSP, cao gấp 5 lần so với 25 khối của solution 4.
+Thanh ghi (FF): solution 5 tiêu thụ 3304 FF, gấp hơn 3 lần so với con số 1026 FF của solution 4.
+Bảng tra cứu (LUT): solution 5 dùng 1207 LUT, gấp hơn 2.4 lần so với mức 502 LUT của solution 4.
+Hình 18: So sánh giữa các solution
+Exercise 3C: Tổng hợp giao diện
+Bước 1: Khởi tạo và thiết lập dự án bằng Vitis HLS
+Mở Command Prompt: Thay vì Vivado, hãy tìm và mở Vitis HLS 2023.1 Command Prompt từ menu Start của Windows.
+Chuyển thư mục: Gõ lệnh để di chuyển tới thư mục chứa tệp nguồn của Exercise 3C:
+Hình 19: Di chuyển đến thư mục tut3C
+Chạy kịch bản Tcl: Sử dụng lệnh của Vitis: vitis_hls -f run_hls.tcl
+Mở giao diện đồ họa: Nhập lệnh sau để mở dự án vừa tạo:
+vitis_hls -p matrix_mult_prj
+Bước 2: Chạy tổng hợp và phân tích báo cáo giao diện
+Trong tab Explorer (bên trái), mở thư mục Source và nhấp đúp vào matrix_mult.cpp. Nhấn nút C Synthesis (biểu tượng hình tam giác màu xanh lá cây ở mục C Synthesis bên khung Flow Navigator) để tổng hợp RTL. Khi báo cáo Synthesis Summary mở ra, hãy tìm đến phần Interface (hoặc mục HW Interfaces trong các bản Vitis mới).công cụ vẫn tự động sinh ra các cổng tín hiệu RTL tuân theo nguyên tắc.
+Hình 22: Mục HW Interfaces
+Báo cáo HW Interfaces trong Vitis HLS 2023.1 chia các cổng tín hiệu giao tiếp của thiết kế thành hai nhóm quản lý chính là AP_MEMORY và TOP LEVEL CONTROL.
+1. Nhóm AP_MEMORY (Giao diện bộ nhớ dữ liệu) Nhóm này định nghĩa cách khối IP kết nối với các mảng dữ liệu a, b, và prod. Điểm cải tiến nổi bật của Vitis HLS 2023.1 là công cụ đã tự động cấp phát giao diện bộ nhớ cổng kép (dual-port RAM) cho các mảng đầu vào để tối ưu tốc độ đọc.
+Mảng đầu vào a và b: Khối IP có thể xuất ra hai địa chỉ cùng lúc thông qua các cổng a_address0, a_address1 và b_address0, b_address1 (tất cả đều là cổng đầu ra 5-bit). Tương ứng với đó, dữ liệu sẽ được đọc về thông qua các cổng đầu vào 8-bit là a_q0, a_q1 và b_q0, b_q1.
+Mảng đầu ra prod: Được tổng hợp dưới dạng bộ nhớ cổng đơn chuyên dùng để ghi kết quả. Nó bao gồm cổng xuất địa chỉ prod_address0 (đầu ra 5-bit) và cổng xuất dữ liệu tính toán prod_d0 (đầu ra 16-bit).
+Nhóm TOP LEVEL CONTROL (Tín hiệu điều khiển hệ thống) Nhóm này bao gồm các tín hiệu quản lý trạng thái, giúp khối IP giao tiếp với phần còn lại của hệ thống.
+Tín hiệu đồng bộ: Bao gồm chân cấp xung nhịp hệ thống ap_clk và chân khởi động lại ap_rst.
+Giao thức ap_ctrl_hs: Giao diện điều khiển (ap_ctrl) sử dụng giao thức bắt tay (handshake) thông qua nhóm 4 tín hiệu bao gồm: ap_done (hoàn thành), ap_idle (nhàn rỗi), ap_ready (sẵn sàng) và ap_start (kích hoạt chạy). Chùm tín hiệu này phối hợp với nhau để xác định chính xác thời điểm IP bắt đầu tính toán ma trận và lúc nào có thể thu thập kết quả đầu ra.
+Bảng "SW-to-HW Mapping" (Ánh xạ Phần mềm - Phần cứng) trình bày cách công cụ HLS chuyển đổi các đối số mảng trong mã C++ (a, b, prod) thành các cổng giao tiếp vật lý (HW Interface) cụ thể trên thiết kế RTL.
+Mảng đầu vào a: Đối số a được phân bổ thành 6 cổng phần cứng (có HW Type là port), phản ánh cấu trúc của một bộ nhớ RAM cổng kép (dual-port RAM). Cấu trúc này bao gồm hai chân truyền địa chỉ là a_address0 và a_address1 (có mục đích sử dụng phần cứng HW Usage là offset), hai tín hiệu cho phép/kích hoạt chip là a_ce0 và a_ce1, cùng hai cổng đọc dữ liệu là a_q0 và a_q1.
+Mảng đầu vào b: Tương tự mảng a, đối số b cũng được tổng hợp thành một giao diện RAM cổng kép với 6 cổng giao tiếp phần cứng. Các cổng này bao gồm các chân cấp địa chỉ (b_address0 và b_address1 đóng vai trò là offset), các chân kích hoạt chip (b_ce0, b_ce1) và các chân nhận dữ liệu đọc về (b_q0, b_q1).
+Mảng đầu ra prod: Đối số prod được ánh xạ thành giao diện RAM cổng đơn, giới hạn ở 4 cổng phần cứng. Nhóm này bao gồm cổng xuất địa chỉ prod_address0 (sử dụng làm offset), cổng kích hoạt bộ nhớ prod_ce0, cổng cho phép thực hiện lệnh ghi prod_we0 và cổng truyền dữ liệu cần ghi prod_d0.
+
+--- TABLE ---
+ | DEPARTMENT OF COMPUTER ENGINEERING (DCE) SOC DESIGN MMH: SOCD334264
+Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277 | Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277

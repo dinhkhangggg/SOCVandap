@@ -1,0 +1,196 @@
+Giới thiệu bài Lab
+Bài Lab hướng dẫn thiết kế hệ thống Zynq SoC cơ bản bằng Vivado IP Integrator và SDK/Vitis trên nền tảng ZedBoard/PynQ-Z2. Quy trình thực hiện HW/SW Codesign gồm tạo Block Design, kết nối AXI GPIO, generate bitstream và viết chương trình C điều khiển LED trên Zynq FPGA.
+Mục tiêu bài Lab
+Hiểu kiến trúc và quy trình thiết kế Hardware/Software Codesign trên nền tảng Zynq SoC.
+Làm quen với Vivado IDE, IP Integrator, AXI interface và quá trình tạo Block Design.
+Thực hiện generate bitstream, export hardware và phát triển ứng dụng C chạy trên ARM Cortex-A9.
+Điều khiển phần cứng trong Programmable Logic (PL) thông qua software trên Processing System (PS).
+Công cụ cần thiết
+Phần cứng
+ZedBoard hoặc PynQ-Z2
+USB JTAG/UART Cable
+Phần mềm
+Vivado Design Suite HLx 2019.2
+Vivado SDK / Vitis
+Kết quả đạt được
+Xây dựng thành công hệ thống Zynq SoC cơ bản.
+Kết nối AXI GPIO với ARM Cortex-A9 Processor.
+Generate và nạp bitstream xuống FPGA.
+Chạy chương trình điều khiển LED trên Zynq.
+Hiểu quy trình Hardware/Software Codesign cơ bản trên FPGA SoC.
+Phần công việc thực hiện
+A. Câu hỏi
+Giải thích sự khác nhau giữa Processing System (PS) và Programmable Logic (PL).
+PS là hệ thống có bộ vi xử lý cố định, được thiết kế sẵn nằm bên trong chip được nạp và
+PL là phần hệ thống lập trình FPGA, có thể chỉnh sửa logic
+Vai trò của AXI Interconnect trong hệ thống Zynq là gì?
+AXI chuẩn hoá toàn bộ việc trao đổi dữ liệu tốc độ cao giữa khác khối xử lý, bộ nhớ và ngoại vi
+Tại sao cần Processor System Reset IP?
+Processor System Reset IP là một IP Core tiêu chuẩn trong bộ công cụ AMD/Xilinx Vivado
+AXI GPIO hoạt động như thế nào trong bài Lab này?
+Trong tài liệu bài Lab này, AXI GPIO hoạt động với vai trò là khối điều khiển ra vào đa dụng được triển khai trên phần logic lập trình
+Trình bày quy trình từ Block Design đến Generate Bitstream.
+Xác thực Block Design: kiểm tra toàn bộ kết nối, bus interfaces, xung clock, reset và ánh xạ địa chỉ
+Tạo HDL Wrapper
+Gắn chân I/O và timing constraint cho các cổng ngoại vi
+Chạy tổng hợp Synthesis sang sơ đồ cổng logic
+Run Implementation: tối ưu routing để không vi phạm time violation
+Generate Bitstream để tạo tệp cấu hình nạp vào FPGA
+B. Thực hành
+Bài 1A: Khởi tạo dự án IP Integrator đầu tiên trên Vivado
+1. Mục tiêu thực hành
+Làm quen với môi trường phát triển tích hợp Vivado IDE (phiên bản 2025.2).
+Nắm vững quy trình khởi tạo một dự án thiết kế RTL mới.
+Cấu hình các thông số cơ bản cho dự án, bao gồm lựa chọn ngôn ngữ mô tả phần cứng (Verilog) và nền tảng phần cứng mục tiêu (ZedBoard Zynq Evaluation and Development Kit).
+Tìm hiểu các thành phần cơ bản trên giao diện làm việc của Vivado IDE (Workspace, Flow Navigator, Tcl Console,...).
+2. Trình tự thực hiện
+Bước 1: Khởi động và tạo dự án mới
+1. Mở phần mềm Vivado 2025.2.
+Hình 1: Vivado 2025.2
+2. Tại màn hình Getting Started, chọn Create New Project để mở trình hướng dẫn New Project Wizard. Nhấn Next để tiếp tục.
+Hình 2: Giao diện Vivado 2025.2
+Bước 2: Thiết lập tên và thư mục lưu trữ
+1. Tại hộp thoại Project Name:
+Project name: Nhập first_zynq_design.
+Project location: Trỏ đến thư mục làm việc (ví dụ: C:/Zynq_Book hoặc thư mục dự án tương ứng).
+Đảm bảo tùy chọn Create project subdirectory được tích chọn để hệ thống tạo một thư mục con riêng biệt cho dự án, giúp quản lý file gọn gàng hơn.
+2. Nhấn Next.
+Hình 3: Tạo dự án mới
+Bước 3: Xác định loại dự án và ngôn ngữ
+1. Tại hộp thoại Project Type:
+Chọn RTL Project.
+Bỏ tích tùy chọn Do not specify sources at this time (nếu có) để có thể cấu hình ngôn ngữ ngay bước sau.
+Hình 4: Tùy chọn loại dự án
+Bước 4: Lựa chọn nền tảng phần cứng mục tiêu
+1. Tại hộp thoại Default Part:
+Chuyển sang tab Boards.
+Ở thanh tìm kiếm hoặc các ô bộ lọc (Vendor/Display Name), tìm và chọn Zynq 7000 ZC702 Evaluation Board.
+Đảm bảo chọn đúng phiên bản phần cứng đang sử dụng.
+2. Nhấn Next.
+Hình 5: Chọn Board phù hợp
+Bước 5: Hoàn tất khởi tạo
+1. Tại hộp thoại New Project Summary, kiểm tra lại toàn bộ thông tin đã thiết lập (Tên dự án, thư mục, ngôn ngữ Verilog, Board).
+2. Nhấn Finish. Quá trình khởi tạo hoàn tất và giao diện làm việc chính của Vivado IDE sẽ xuất hiện.
+Hình 6: Kiểm tra thông tin trước khi hoàn thành
+3. Kết quả đạt được
+Dự án first_zynq_design đã được khởi tạo thành công với cấu hình chuẩn cho mạch Board.
+Môi trường Vivado IDE đã sẵn sàng. Qua quan sát, có thể nhận diện được các khu vực chức năng chính hỗ trợ thiết kế như:
+Flow Navigator: Cung cấp các phím tắt quản lý toàn bộ luồng thiết kế từ khởi tạo IP Integrator, tổng hợp (Synthesis), thực thi (Implementation) đến tạo Bitstream.
+Project Manager / Sources: Khu vực quản lý phân cấp các file tài nguyên, IP và thư viện (hiện tại dự án đang trống).
+Console / Messages: Hiển thị các thông báo Tcl và log quá trình chạy công cụ.
+Bài 1B: Xây dựng hệ thống zynq trên vivado ip integrator
+1. Mục tiêu
+Xây dựng một hệ thống nhúng Zynq cơ bản thông qua giao diện thiết kế đồ họa IP Integrator.
+Hệ thống bao gồm việc tích hợp nhân xử lý Zynq (PS) cùng với khối ngoại vi AXI GPIO nhằm điều khiển các đèn LED trên mạch thực tế (PL).
+Hoàn thiện thiết kế phần cứng, tạo tệp cấu hình bitstream và xuất nền tảng sang môi trường lập trình phần mềm
+2. Các bước tiến hành
+Bước 1: Khởi tạo Block Design
+Tại thanh điều hướng Flow Navigator, chọn mục Create Block Design thuộc phần IP Integrator và đặt tên cho sơ đồ thiết kế là first_zynq_system.
+Hình 7: Tạo Block Design
+Bước 2: Cấu hình Zynq Processing System
+Thêm khối IP ZYNQ7 Processing System từ IP Catalog vào không gian làm việc.
+Sử dụng chức năng Run Block Automation để phần mềm tự động áp dụng các thiết lập (preset) của board ZedBoard, bao gồm việc sinh ra các kết nối ngoại vi cố định như giao tiếp bộ nhớ DDR và FIXED_IO.
+Hình : Add IP
+Hình : Sau khi add Processing System
+Hình : Run Block Automation
+Tính năng Block Automation được sử dụng để tự động hóa quá trình khởi tạo cấu hình phần cứng cho nhân vi xử lý Zynq. Bằng cách kích hoạt tùy chọn Apply Board Preset, phần mềm Vivado sẽ tự động nạp các tham số đặc tả phần cứng của bo mạch đích, đồng thời khởi tạo các kết nối ngoại vi tiêu chuẩn bao gồm giao diện bộ nhớ (DDR) và các cổng tín hiệu cố định (FIXED_IO). Quá trình này giúp hệ thống trên chip (SoC) đồng bộ hoàn toàn với nền tảng vật lý thực tế, tối ưu hóa thời gian phát triển và loại bỏ rủi ro sai sót do thiết lập thủ công.
+Hình : Block Design sau khi Run Block Automation
+Khối ZYNQ7 Processing System (PS) sau khi thực thi thành công quá trình Block Automation. Khối vi xử lý trung tâm đã được tự động nạp cấu hình chuẩn của bo mạch, đồng thời định tuyến và xuất các tín hiệu ra cổng vật lý ngoại vi, bao gồm giao diện bộ nhớ DDR và cụm chân vào/ra cố định FIXED_IO. Khối PS lúc này đóng vai trò là hệ thống chủ (Master), đã sẵn sàng cung cấp xung nhịp hệ thống (FCLK_CLK0) và bus giao tiếp dữ liệu (M_AXI_GP0) để kết nối với các ngoại vi thuộc phần mảng logic (PL).
+Bước 3: Tích hợp và tự động kết nối AXI GPIO.
+Thêm khối IP AXI GPIO để quản lý tín hiệu ra đèn LED.
+Kích hoạt Run Connection Automation lần thứ nhất cho giao diện /axi_gpio_0/S_AXI. Hệ thống sẽ tự động khởi tạo thêm các IP phụ trợ gồm bộ định tuyến AXI Interconnect và bộ quản lý khởi động Processor System Reset, giúp kết nối hoàn chỉnh bus dữ liệu từ vi xử lý đến GPIO.
+Kích hoạt Run Connection Automation lần thứ hai cho giao diện /axi_gpio_0/GPIO và lựa chọn đích đến là LEDs_4Bits để ánh xạ chính xác cổng xuất tín hiệu với các đèn LED vật lý trên board.
+Hình : Thêm AXI_GPIO
+Hình : Sau khi thêm AXI_GPIO
+Hình : Run Connection Automation
+Hộp thoại Run Connection Automation đang thiết lập thông số kết nối cho giao diện S_AXI của khối ngoại vi AXI GPIO. Chức năng này tự động định tuyến giao tiếp dữ liệu bằng cách kết nối giao diện Slave của khối GPIO vào không gian địa chỉ Master của nhân vi xử lý Zynq (/processing_system7_0/M_AXI_GP0). Thông qua cấu hình tự động (Auto), phần mềm sẽ tự động khởi tạo một bộ định tuyến trung gian (AXI Interconnect) và đồng bộ hóa các nguồn xung nhịp (Clock source) cho toàn bộ hệ thống bus. Quá trình này đảm bảo luồng dữ liệu từ vi xử lý đến các chân điều khiển phần cứng được thiết lập chính xác mà không cần đấu nối dây thủ công.
+Hình : Run Connection Automation GPIO và S_AXI
+Hộp thoại Run Connection Automation thực hiện mapping giao diện ngoại vi GPIO (/axi_gpio_0/GPIO) tới thành phần phần cứng tương ứng trên bo mạch là cụm leds_4bits (LED). Thao tác này giúp công cụ Vivado tự động xuất các chân tín hiệu ra ngoài (external ports), đồng thời tự động áp dụng các ràng buộc vật lý (pin location và chuẩn điện áp I/O) từ thông số định nghĩa của bo mạch đích mà không cần phải khai báo thủ công trong file .xdc. Qua đó, các chân xuất logic của khối AXI GPIO được kết nối trực tiếp với 4 đèn LED trên bo mạch để sẵn sàng nhận lệnh điều khiển từ nhân Zynq.
+Hình : Block Design sau khi Run Connection Automation GPIO và S_AXI
+Kiến trúc hệ thống nhúng trên chip (SoC) tích hợp giữa Processing System - PS và Programmable Logic - PL:
+ZYNQ7 Processing System (processing_system7_0): Khối vi xử lý trung tâm (Master) cung cấp xung nhịp hệ thống FCLK_CLK0, tín hiệu khởi tạo FCLK_RESET0_N, xuất các chân kết nối bộ nhớ DDR, FIXED_IO ra phần cứng và làm chủ bus dữ liệu thông qua cổng M_AXI_GP0.
+AXI Interconnect (ps7_0_axi_periph): Mạng chuyển mạch trung gian (Bus Matrix) định tuyến các gói tin AXI-Lite giữa giao diện Master (M_AXI_GP0 của PS) với giao diện Slave của khối ngoại vi.
+Processor System Reset (rst_ps7_0_50M): Khối đồng bộ hóa tín hiệu reset hệ thống theo xung nhịp của vi xử lý. Khối nhận tín hiệu reset gốc FCLK_RESET0_N và xung FCLK_CLK0 từ PS để sinh ra các tín hiệu reset đồng bộ (interconnect_aresetn, peripheral_aresetn) cho bus và các ngoại vi trong vùng PL, chống hiện tượng xung đột pha tín hiệu khi khởi động.
+AXI GPIO (axi_gpio_0): Khối ngoại vi vào/ra đa dụng đóng vai trò Slave trong vùng PL, khối nhận dữ liệu ghi từ CPU qua bus S_AXI và xuất trực tiếp mức logic ra cụm cổng vật lý leds_4bits để điều khiển trạng thái các đèn LED trên bo mạch.
+Cơ chế hoạt động: Hệ thống vận hành theo mô hình Master-Slave, nhân xử lý ARM thuộc khối PS thực thi phần mềm điều khiển, truyền lệnh đọc/ghi qua hệ thống bus AXI Interconnect đến các thanh ghi của khối AXI GPIO trên PL, từ đó đóng/ngắt các chân logic xuất ra 4 đèn LED vật lý trên board mạch.
+Hình : Create HDL Wrapper
+Thao tác Create HDL Wrapper thực hiện đóng gói toàn bộ sơ đồ khối đồ họa (first_zynq_system.bd) thành một module mã nguồn phần cứng cấp cao nhất (Top-level HDL Wrapper). Do trình tổng hợp phần cứng (Synthesis) của Vivado yêu cầu một module văn bản RTL chuẩn làm gốc phân cấp (Top module), tệp wrapper này được tự động khởi tạo bằng Verilog nhằm mappinh toàn bộ sơ đồ hệ thống và định nghĩa các cổng ngoại vi bên ngoài (như DDR, FIXED_IO, leds_4bits) thành các cổng vào/ra vật lý (input/output) của chip FPGA trước khi đưa vào khâu tổng hợp và thực thi logic.
+Bước 4: Kiểm tra và tạo mã bọc hệ thống (HDL Wrapper).
+Chạy công cụ Validate Design để kiểm tra tính hợp lệ của toàn bộ sơ đồ (DRC).
+Sau khi xác nhận thiết kế không có lỗi, mở cửa sổ Sources, click chuột phải vào file block design và chọn lệnh Create HDL Wrapper. (Với dự án này, mã bọc kiến trúc cao nhất - top-level sẽ được tự động sinh ra bằng ngôn ngữ Verilog).
+Hình : Validate Design
+Thao tác Validate Design được thực hiện nhằm chạy quy trình kiểm tra luật thiết kế (Design Rule Check - DRC) cho toàn bộ hệ thống sơ đồ khối. Quá trình này tự động xác minh tính toàn vẹn của cấu trúc bus AXI, kiểm tra độ tương thích giữa các miền xung nhịp - tín hiệu reset, và đảm bảo mọi khối ngoại vi trên mảng PL đều đã được phân bổ không gian địa chỉ bộ nhớ hợp lệ, loại bỏ các lỗi kết nối tiềm ẩn trước khi tiến hành tổng hợp và tạo tệp bitstream.
+Hình : Validate thành công
+Hình : Create HDL Wrapper cho first_zynq_system
+Thực hiện khởi tạo tệp bao bọc phần cứng cấp cao nhất (HDL Wrapper) cho thiết kế first_zynq_system.bd với chế độ Let Vivado manage wrapper and auto-update. Thao tác này giúp tự động sinh mã nguồn Verilog đóng vai trò làm Top-level module cho toàn hệ thống, đồng thời duy trì cơ chế tự động đồng bộ hóa các cổng vào/ra (I/O ports) mỗi khi sơ đồ khối có sự thay đổi, đảm bảo tính toàn vẹn của cấu trúc phân cấp trước khi tiến hành tổng hợp mạch.
+Bước 5: Tạo Bitstream và xuất nền tảng.
+Nhấp vào Generate Bitstream để khởi chạy trọn vẹn quy trình biên dịch phần cứng bao gồm tổng hợp (Synthesis) và thực thi (Implementation).
+Hình : Generate Bitstream
+Hình : Chọn cấu hình để thực thi
+Sau khi quá trình tạo bitstream hoàn tất (có thể mất vài phút), một hộp thoại sẽ xuất hiện. Chọn Open Implemented Design và nhấn OK.
+Hình 23: Hộp thoại Bitstream Generation Completed
+Hình : Kết quả sau khi chạy Open Implemented Design
+Bảng tóm tắt kết quả phân tích định thời tĩnh (Design Timing Summary) sau bước Implementation ghi nhận hệ thống đạt chuẩn định thời hoàn toàn (All user specified timing constraints are met). Các chỉ số độ dôi thời gian đều mang giá trị dương với Worst Negative Slack (WNS) đạt 12.442 ns, Worst Hold Slack (WHS) đạt 0.060 ns và số lượng điểm lỗi định thời bằng 0 (Failing Endpoints = 0). Kết quả này khẳng định mạch logic vận hành ổn định, đồng bộ tuyệt đối với miền xung nhịp hệ thống 50 MHz từ khối PS mà không xảy ra hiện tượng bất định trạng thái (Metastability), đủ điều kiện an toàn để tiến hành xuất tệp bitstream nạp lên chip FPGA.
+Báo cáo phân tích công suất (Power Analysis) sau bước thực thi ghi nhận tổng mức tiêu thụ năng lượng của chip SoC đạt 1.709 W. Trong đó, công suất tiêu thụ động chiếm ưu thế với 1.566 W (92%), phần lớn tập trung tại khối xử lý trung tâm Zynq PS (1.564 W), trong khi vùng logic PL tiêu tán năng lượng rất thấp do thiết kế chỉ gồm ngoại vi điều khiển GPIO cơ bản. Đồng thời, nhiệt độ tiếp giáp bán dẫn duy trì ở mức 44.7°C với biên độ an toàn nhiệt đạt 40.3°C, khẳng định thiết kế thỏa mãn hoàn toàn các tiêu chuẩn về tiết kiệm năng lượng và độ ổn định nhiệt trên phần cứng thực tế.
+Bước 6: Xuất phần cứng sang SDK
+Trên thanh menu, chọn File > Export > Export Hardware for SDK
+Hình : Vị trí của Export Hardware
+Tại cửa sổ Export Hardware Platform, nhấn Next để bắt đầu.
+Hình : Cửa sổ Export Hardware Platform
+Chọn Include bitstream. Điều này đảm bảo file .xsa được xuất ra sẽ chứa file lập trình FPGA. Nhấn Next.
+Hình : Chọn loại Output
+Tên và đường dẫn (Files):
+XSA file name: Giữ nguyên tên mặc định.
+Export to: Giữ nguyên đường dẫn mặc định.
+Nhấn Next.
+Hình : Cửa sổ Tên và đường dẫn (Files)
+Kiểm tra lại các thông tin (đặc biệt là mục Include bitstream: Yes). Nhấn Finish để hoàn tất quá trình tạo file .xsa.
+Hình : Cửa sổ kiểm tra thông tin
+Kết quả đạt được
+Một hệ thống nhúng Zynq cơ bản đã được thiết kế hoàn chỉnh bằng công cụ đồ họa IP Integrator.
+Hệ thống phần cứng này bao gồm bộ xử lý trung tâm Zynq (Zynq PS) kết nối với một khối điều khiển ngoại vi AXI GPIO được triển khai trong vùng logic lập trình được (PL) thông qua bus giao tiếp AXI.
+Khối điều khiển GPIO đã được thiết lập để kết nối trực tiếp với các đèn LED trên bo mạch ZedBoard.
+Phần mềm đã biên dịch thành công và tạo ra file cấu hình phần cứng (bitstream), sẵn sàng để nạp xuống PL của vi mạch.
+Toàn bộ thiết kế phần cứng đã được xuất (export) thành công sang môi trường phát triển phần mềm (Vitis IDE ) để làm nền tảng cho việc viết mã C điều khiển phần cứng ở Bài tập 1C.
+Bài 1C: Phát triển ứng dụng phần mềm trên môi trường SDK
+1. Mục tiêu
+Xây dựng một ứng dụng phần mềm điều khiển bằng ngôn ngữ C nhằm tương tác với hệ thống phần cứng đã thiết kế.
+Ứng dụng sẽ chạy trên nhân xử lý ARM (Processing System - PS) của Zynq để điều khiển các đèn LED thông qua khối ngoại vi AXI GPIO được triển khai trên vùng Programmable Logic (PL).
+2. Các bước tiến hành
+Bước 1: Tạo thư mục Workspace:
+Mở File Explorer trên máy tính.
+Đi đến thư mục dự án Vivado hiện tại.
+Tạo một thư mục mới bên trong đó và đặt tên là vitis_workspace.
+Hình : Thư mục vitis_workspace
+Bước 2: Mở Vitis:
+Trong Vivado, trên thanh công cụ trên cùng (Menu Bar), chọn Tools > Launch Vitis IDE.
+Khi Vitis yêu cầu chọn Workspace, bạn hãy chọn thư mục vitis_worksspace tạo ở bước 1
+Hình : Vị trí Lauch Vitis IDE
+Hình : Chọn Workspace
+Bước 3: Tạo Platform Project
+Sau khi mở Vitis IDE thành công, hãy tắt trang Welcome (nếu có).
+Chọn File > New > Platform Project.
+Đặt tên cho nền tảng là zynq_platform và nhấn Next.
+Hình : Đặt tên cho Platform Project
+Chọn Create from hardware specification (XSA).
+Nhấp vào nút Browse... và tìm đến file .xsa đã xuất từ Vivado (file thường nằm trong thư mục gốc của dự án Vivado).
+Hình : Chọn file .xsa đã xuất từ vivado
+Hình : Chọn OS với Processor
+Giữ nguyên hệ điều hành là standalone, bộ vi xử lý là ps7_cortexa9_0 và nhấn Finish. Vitis sẽ mất một lúc để tạo gói hỗ trợ bo mạch (Board Support Package - BSP).
+Sau khi tạo xong, hãy nhấp chuột phải vào dự án zynq_platform trong cửa sổ Explorer và chọn Build Project để biên dịch nền tảng này.
+Hình : Tạo Application Component
+Hình : Chọn Platform
+Hình : Tạo file C để chạy code trên Board
+Hình : Viết code C điều khiển đèn với Build
+Hình : Sau khi Build thành công
+Kết quả đạt được
+Tạo ra một ứng dụng phần mềm giúp bộ vi xử lý Zynq (PS) tương tác và điều khiển phần cứng (khối IP) được triển khai trong vùng PL.
+Tìm hiểu và tích hợp thành công các driver phần mềm do Vivado tự động sinh ra vào ứng dụng C.
+Thiết lập kết nối phần cứng và nạp thành công file cấu hình bitstream xuống bộ nhớ của FPGA.
+Biên dịch và thực thi thành công ứng dụng phần mềm trực tiếp trên bộ vi xử lý Zynq của bo mạch ZedBoard.
+Kết quả hoạt động thực tế trên bo mạch: Các đèn LED trên ZedBoard nhấp nháy luân phiên liên tục giữa hai trạng thái sáng/tắt đã được lập trình.
+Hình nhóm:
+
+--- TABLE ---
+ | DEPARTMENT OF COMPUTER ENGINEERING (DCE) SOC DESIGN MMH: SOCD334264
+Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277 | Group: 04 Name:  Nguyễn Hồng Lịch – 24161298 Lê Thanh Tú – 23161357 Phạm Trung Kiên – 23161283 Hoàng Bảo Phúc – 23161309 Chống Định Khang – 23161277
